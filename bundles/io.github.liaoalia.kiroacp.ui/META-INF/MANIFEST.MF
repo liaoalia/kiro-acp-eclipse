@@ -8,7 +8,10 @@ Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ActivationPolicy: lazy
 Automatic-Module-Name: io.github.liaoalia.kiroacp.ui
 Require-Bundle: org.eclipse.ui,
- org.eclipse.core.runtime
+ org.eclipse.core.runtime,
+ org.eclipse.core.resources,
+ org.eclipse.ui.console,
+ io.github.liaoalia.kiroacp.core
 Import-Package: com.fasterxml.jackson.core;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.databind;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.databind.node;version="[2.17.0,3.0.0)"
