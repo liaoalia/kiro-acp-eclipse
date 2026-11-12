@@ -92,12 +92,11 @@ class ChatPageLocationTest {
 	void aPageOnAShareMatchesItsOwnUrl() {
 		assumeTrue(windows(), "UNC paths exist on Windows only");
 		Path shared = Path.of("\\\\server\\share\\eclipse\\web\\index.html");
-		// As WebView2 reports it, and as java.io.File.toURI() prints it.
+		// As WebView2 reports it, and as java.io.File.toURI() prints it (literals: asking
+		// the JDK for the URI of a share path would go looking for the server).
 		assertTrue(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/index.html"));
 		assertTrue(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/index.html?view=x"));
 		assertTrue(ChatPageLocation.matches(shared, "file:////server/share/eclipse/web/index.html"));
-		assertTrue(ChatPageLocation.matches(shared, shared.toFile().toURI().toString()));
-		assertTrue(ChatPageLocation.matches(shared, shared.toUri().toString()));
 	}
 
 	@Test
@@ -116,6 +115,39 @@ class ChatPageLocationTest {
 		String path = page.toUri().getRawPath();
 		assertFalse(ChatPageLocation.matches(page, "file://server" + path));
 		assertFalse(ChatPageLocation.matches(page, "file:////server/share/web/index.html"));
+	}
+
+	/**
+	 * Spellings of a path on another machine that carry no host and no leading
+	 * double slash. They must be plain mismatches; the class has no way to look
+	 * a path up, so none of them can make the host contact that machine.
+	 */
+	@Test
+	void encodedSharePathsAreNotThePage() {
+		for (String location : new String[] {
+				"file:///%5C%5Cattacker%5Cshare%5Cx.html",
+				"file:/%5C%5Cattacker%5Cshare/x.html",
+				"file:///%5C/attacker/share/x.html",
+				"file://localhost/%5C%5Cattacker%5Cshare%5Cx.html",
+				"file:///%2F%2Fattacker/share/x.html",
+				"file://attacker/share/x.html",
+				"file:////attacker/share/x.html",
+				"file://///attacker/share/x.html" }) {
+			assertFalse(ChatPageLocation.matches(page, location), location);
+		}
+	}
+
+	@Test
+	void theSourceNeverConsultsTheFileSystem() throws IOException {
+		// A guard on the property the class documents: matching is name comparison only.
+		Path source = Path.of(System.getProperty("kiroacp.ui.src", ""), "io", "github", "liaoalia", "kiroacp", "ui",
+				"chat", "ChatPageLocation.java");
+		assumeTrue(Files.isRegularFile(source), "source tree not available: " + source);
+		String code = Files.readString(source);
+		for (String forbidden : new String[] { "java.nio.file.Files", "java.io.File", "toRealPath", "isSameFile",
+				".exists(" }) {
+			assertFalse(code.contains(forbidden), forbidden);
+		}
 	}
 
 	@Test
