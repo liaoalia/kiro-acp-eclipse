@@ -106,12 +106,12 @@ Owns: `core/.../acp/api/`, `core/.../model/`, `core/.../host/`.
 
 ### Task 4: ACP client
 Owns: `core/.../acp/impl/`, `core/.../acp/process/`. Reference: `src/acp/client.ts`, `process.ts`, `stream.ts`, D3, D5, D19.
-- [ ] process launch: resolve the CLI path (PATH plus default install dirs), `.cmd`/`.bat` through `cmd.exe`, inherited environment, stderr to the log, exit and crash handling
-- [ ] connection: `initialize` with client capabilities (fs read/write, terminal, `auth.terminal`, `_meta.kiro.openExternalUrl`), capture agent capabilities, auth methods and `_meta.kiro.extensionMethods`
-- [ ] sessions: new, prompt, cancel (notification plus `cancelled` outcome for pending permissions), set mode, set config option, set model; per-session event stream in wire order
-- [ ] one agent process shared by many sessions; restart
-- [ ] tests against the fake agent, ported from `test/acp-client.test.ts` and `test/process.test.ts`
-- [ ] run the validation commands
+- [x] process launch: resolve the CLI path (PATH plus default install dirs), `.cmd`/`.bat` through `cmd.exe`, inherited environment, stderr to the log, exit and crash handling
+- [x] connection: `initialize` with client capabilities (fs read/write, terminal, `auth.terminal`, `_meta.kiro.openExternalUrl`), capture agent capabilities, auth methods and `_meta.kiro.extensionMethods`
+- [x] sessions: new, list, load (history flagged as replay), prompt, cancel (notification plus `cancelled` outcome for pending permissions), set mode, set config option, set model, authenticate, extension calls; session events in wire order
+- [x] one agent process shared by many sessions; restart
+- [x] tests against the fake agent, ported from `test/acp-client.test.ts` and `test/process.test.ts`
+- [ ] run the validation commands (only `mvn verify` for the core bundle and its tests was run in the task worktree: 95 tests pass; the webview and UI modules were not built there)
 
 ### Task 5: Transcript reducer
 Owns: `core/.../pure/transcript/`. Reference: `src/features/pure/transcript.ts`, `test/transcript.test.ts`.
