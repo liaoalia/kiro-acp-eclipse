@@ -12,6 +12,17 @@ It is a port of the VS Code extension of the same name. The chat page is that ex
 - Windows: the WebView2 runtime (part of Windows 11). Linux and macOS builds exist but are untested.
 - Eclipse and the plugin installed on a local drive. From a network share the view shows a message instead of the chat.
 
+## Install
+
+1. Download `kiro-acp-eclipse-<version>.zip` from the repository's Releases page. Do not unpack it.
+2. In Eclipse: *Help > Install New Software… > Add… > Archive…*, choose the zip, *Add*.
+3. Tick *Kiro ACP Chat*, then *Next* and *Finish*. The plugin is not signed, so Eclipse asks whether to trust unsigned content: select it and confirm. Restart when asked.
+4. Open the view with *Window > Show View > Other… > Kiro > Kiro Chat*. Settings are under *Window > Preferences > Kiro ACP Chat*.
+
+To update, install a newer zip the same way. To remove: *Help > About Eclipse IDE > Installation Details*, select *Kiro ACP Chat*, *Uninstall…*.
+
+A release is made by pushing a tag: `git tag v0.1.0 && git push origin v0.1.0` runs `.github/workflows/release.yml`, which builds, tests and attaches the zip.
+
 ## Build
 
 Needs Node 24, Maven 3.9 and a JDK 21 or newer in `JAVA_HOME` (Tycho 5 does not run on older ones; the bundles still target Java 17).

@@ -1,0 +1,51 @@
+name: release
+
+# Pushing a tag like v0.1.0 builds the plugin and publishes a GitHub release
+# with the update site as a zip that Eclipse installs from.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # The chat page test needs a real browser widget; WebView2 comes with the Windows image.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: Webview
+        run: |
+          npm --prefix webview ci
+          npm --prefix webview run build
+          npm --prefix webview run typecheck
+      - name: Fake agent
+        run: npm --prefix tests/fixtures/fake-agent ci
+      - name: Build and test
+        run: mvn -B -ntp verify
+      - name: Name the update site
+        shell: bash
+        run: |
+          zip=$(ls releng/io.github.liaoalia.kiroacp.site/target/io.github.liaoalia.kiroacp.site-*.zip)
+          cp "$zip" "kiro-acp-eclipse-${GITHUB_REF_NAME}.zip"
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: tests/*/target/surefire-reports
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: kiro-acp-eclipse-${{ github.ref_name }}.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
