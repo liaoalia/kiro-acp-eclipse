@@ -87,27 +87,48 @@ class ChatPageLocationTest {
 		return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
 	}
 
-	/** An install on a network share: both spellings of the page's own URL are the page. */
+	/** An install on a network share is not supported: no spelling of its URL is the page. */
 	@Test
-	void aPageOnAShareMatchesItsOwnUrl() {
+	void aPageOnAShareIsNeverThePage() {
 		assumeTrue(windows(), "UNC paths exist on Windows only");
-		Path shared = Path.of("\\\\server\\share\\eclipse\\web\\index.html");
-		// As WebView2 reports it, and as java.io.File.toURI() prints it (literals: asking
-		// the JDK for the URI of a share path would go looking for the server).
-		assertTrue(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/index.html"));
-		assertTrue(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/index.html?view=x"));
-		assertTrue(ChatPageLocation.matches(shared, "file:////server/share/eclipse/web/index.html"));
+		for (String server : new String[] { "server", "file_srv", "10.0.0.5" }) {
+			Path shared = Path.of("\\\\" + server + "\\share\\eclipse\\web\\index.html");
+			assertFalse(ChatPageLocation.isLocal(shared), server);
+			for (String location : new String[] {
+					"file://" + server + "/share/eclipse/web/index.html",
+					"file://" + server + "/share/eclipse/web/index.html?view=x",
+					"file:////" + server + "/share/eclipse/web/index.html",
+					"file://///" + server + "/share/eclipse/web/index.html",
+					"file:///%5C%5C" + server + "%5Cshare%5Ceclipse%5Cweb%5Cindex.html" }) {
+				assertFalse(ChatPageLocation.matches(shared, location), location);
+			}
+		}
 	}
 
 	@Test
-	void aPageOnAShareDoesNotMatchAnotherHostShareOrFile() {
-		assumeTrue(windows(), "UNC paths exist on Windows only");
-		Path shared = Path.of("\\\\server\\share\\eclipse\\web\\index.html");
-		assertFalse(ChatPageLocation.matches(shared, "file://other/share/eclipse/web/index.html"));
-		assertFalse(ChatPageLocation.matches(shared, "file://server/other/eclipse/web/index.html"));
-		assertFalse(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/bridge.js"));
-		assertFalse(ChatPageLocation.matches(shared, "file:////other/share/eclipse/web/index.html"));
-		assertFalse(ChatPageLocation.matches(shared, "file:///share/eclipse/web/index.html"));
+	void aLocalPageIsLocal() {
+		assertTrue(ChatPageLocation.isLocal(page));
+		assertFalse(ChatPageLocation.isLocal(null));
+	}
+
+	/**
+	 * An authority java.net.URI cannot parse as a host name leaves getHost() null;
+	 * it still names a machine, even when the rest of the URL is the page's own path.
+	 */
+	@Test
+	void anAuthorityThatIsNotAHostNameIsStillAnotherMachine() {
+		String path = page.toUri().getRawPath();
+		for (String authority : new String[] { "file_srv", "evil_host", "a_b.example", "user@host", "host:8080",
+				"LOCALHOST.evil", "localhost.", "127.0.0.1", "[::1]" }) {
+			assertFalse(ChatPageLocation.matches(page, "file://" + authority + path), authority);
+		}
+	}
+
+	@Test
+	void localhostIsThisMachine() {
+		String path = page.toUri().getRawPath();
+		assertTrue(ChatPageLocation.matches(page, "file://localhost" + path));
+		assertTrue(ChatPageLocation.matches(page, "file://LOCALHOST" + path + "?view=1"));
 	}
 
 	@Test

@@ -30,6 +30,7 @@
 - **Theme**: `--vscode-*` variables get defaults in `webview/host/theme.css` (light and dark); the host overrides background, foreground and fonts from Eclipse and picks light/dark from the background's luminance.
 - **JSON**: Jackson tree model at the page boundary; typed view models in `core`.
 - **Protocol layer**: the Java SDK if it passes Task 2, otherwise an own NDJSON JSON-RPC client over Jackson. The rest of the code sees only `core.acp` interfaces.
+- **Local installs only**: the chat page must be on a local drive. From a network share (`\\server\share`) the view shows a message instead of the chat, because `file:` URLs name another machine in too many ways to tell the page from a foreign document reliably.
 - **Not ported**: VS Code tab bookkeeping (D15, D28), webview panel serialisation.
 
 ## Repository layout

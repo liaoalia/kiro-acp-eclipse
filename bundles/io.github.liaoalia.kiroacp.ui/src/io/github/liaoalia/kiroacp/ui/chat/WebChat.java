@@ -122,8 +122,15 @@ public final class WebChat {
 
 		try {
 			File file = pageFile();
-			page = file.toPath();
-			browser.setUrl(file.toURI() + "?view=" + URLEncoder.encode(instanceId, StandardCharsets.UTF_8));
+			if (ChatPageLocation.isLocal(file.toPath())) {
+				page = file.toPath();
+				browser.setUrl(file.toURI() + "?view=" + URLEncoder.encode(instanceId, StandardCharsets.UTF_8));
+			} else {
+				// page stays null: nothing is the chat page and the bridge serves no one.
+				LOG.error("Kiro chat cannot run from a network location: " + file);
+				browser.setText("<html><body><p>Kiro Chat cannot run from a network location. "
+						+ "Install Eclipse and this plugin on a local drive.</p></body></html>");
+			}
 		} catch (IOException e) {
 			LOG.error("Kiro chat page could not be located", e);
 			browser.setText("<html><body><p>Kiro chat page could not be loaded.</p></body></html>");
