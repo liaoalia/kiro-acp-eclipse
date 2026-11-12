@@ -60,7 +60,7 @@ releng/io.github.liaoalia.kiroacp.site      p2 update site
 
 ## Validation Commands
 Run from the repository root, with `JAVA_HOME` pointing at a JDK 21 or newer (on this machine `D:\Work\Java\openjdk-23.0.2`; CI sets it with `actions/setup-java`):
-- `npm --prefix webview ci` then `npm --prefix webview run build` and `npm --prefix webview run typecheck`
+- `npm --prefix webview ci` then `npm --prefix webview run build` and `npm --prefix webview run typecheck` (after re-vendoring also `npm --prefix webview run samples`)
 - `npm --prefix tests/fixtures/fake-agent ci` (from the task that adds the fake agent onwards; the tests that start it fail without it)
 - `mvn -B -ntp verify`
 
@@ -96,11 +96,11 @@ Owns: `core/.../acp/rpc/`, `docs/DECISIONS.md`. Outcome: own client (DECISIONS D
 
 ### Task 3: Contracts
 Owns: `core/.../acp/api/`, `core/.../model/`, `core/.../host/`.
-- [ ] `acp/api`: `KiroAgent`, `AgentSession`, `SessionEvent`, `ConnectionState`, `ClientServices`, mirroring the reference `src/acp/types.ts`
-- [ ] `model`: Java records for every type in `protocol.ts` (`UiState`, `ToWebview` and `FromWebview` variants, view models) with Jackson mapping
-- [ ] `host`: interfaces the core needs from Eclipse (`Workspace`, `Settings`, `Logger`, `UiScheduler`, `ChatPage` for posting messages) so the controller is testable with fakes
-- [ ] a script in `webview/` that emits one sample JSON per `ToWebview` / `FromWebview` variant, type-checked against the vendored `protocol.ts`; tests round-trip every sample through the Java models
-- [ ] run the validation commands - must pass before wave 1
+- [x] `acp/api`: `KiroAgent`, `SessionState`, `SessionEvent`, `ConnectionStateChange`, `AgentInfo`, `ClientServices`, `AcpException`, mirroring the reference `src/acp/types.ts`; ACP payloads stay `JsonNode` (DECISIONS D1), results are `CompletableFuture`s
+- [x] `model`: Java records for every type in `protocol.ts` (`UiState`, `ToWebview` and `FromWebview` variants, view models) with Jackson mapping; `UiJson` converts
+- [x] `host`: interfaces the core needs from Eclipse (`Workspace`, `Settings`, `Logger`, `UiScheduler`, `ChatPage`, `Subscription`) so the controller is testable with fakes
+- [x] `webview/samples.ts` emits samples for every `ToWebview` / `FromWebview` variant into `tests/fixtures/protocol-samples.json`, type-checked against the vendored `protocol.ts` (a mapped type fails the build when a variant is missing); `ProtocolSamplesTest` round-trips every sample through the Java models
+- [x] run the validation commands - must pass before wave 1
 
 ### Wave 1 (parallel): MVP building blocks
 

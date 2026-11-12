@@ -5,7 +5,8 @@
   "scripts": {
     "sync": "node sync.mjs",
     "build": "node build.mjs",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "samples": "node samples.ts > ../tests/fixtures/protocol-samples.json"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

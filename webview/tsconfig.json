@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["vendor/src/**/*.ts"]
+  "include": ["vendor/src/**/*.ts", "samples.ts"]
 }
