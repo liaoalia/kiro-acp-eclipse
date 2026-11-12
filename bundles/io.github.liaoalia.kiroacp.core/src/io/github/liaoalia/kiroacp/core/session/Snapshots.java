@@ -80,8 +80,10 @@ final class Snapshots {
 			if (snapshot == null) {
 				content.add(item);
 			} else {
-				content.add(new ToolContentView.Terminal(((ToolContentView.Terminal) item).terminalId(), snapshot.output(),
-						snapshot.exitCode()));
+				String id = ((ToolContentView.Terminal) item).terminalId();
+				// Three states for the page: running (no field), ended with a code, ended without one (killed).
+				content.add(snapshot.exited() ? ToolContentView.Terminal.ended(id, snapshot.output(), snapshot.exitCode())
+						: ToolContentView.Terminal.running(id, snapshot.output()));
 			}
 		}
 		return new ToolCallView(call.toolCallId(), call.title(), call.kind(), call.status(), content, call.locations(),

@@ -49,4 +49,29 @@
          </enablement>
       </consolePageParticipant>
    </extension>
+   <extension point="org.eclipse.ui.commands">
+      <category id="io.github.liaoalia.kiroacp.commands" name="Kiro"/>
+      <command id="io.github.liaoalia.kiroacp.command.focusChat" name="Focus Kiro Chat" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.newSession" name="New Kiro Session" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.cancelTurn" name="Cancel Kiro Turn" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.restartAgent" name="Restart Kiro Agent Process" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.showLog" name="Show Kiro Protocol Log" categoryId="io.github.liaoalia.kiroacp.commands"/>
+   </extension>
+   <extension point="org.eclipse.ui.handlers">
+      <handler commandId="io.github.liaoalia.kiroacp.command.focusChat" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.newSession" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.cancelTurn" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.restartAgent" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.showLog" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+   </extension>
+   <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="toolbar:io.github.liaoalia.kiroacp.chat">
+         <command commandId="io.github.liaoalia.kiroacp.command.newSession" label="New Session" style="push"/>
+      </menuContribution>
+      <menuContribution locationURI="menu:io.github.liaoalia.kiroacp.chat">
+         <command commandId="io.github.liaoalia.kiroacp.command.cancelTurn" label="Cancel Current Turn" style="push"/>
+         <command commandId="io.github.liaoalia.kiroacp.command.restartAgent" label="Restart Agent Process" style="push"/>
+         <command commandId="io.github.liaoalia.kiroacp.command.showLog" label="Show Protocol Log" style="push"/>
+      </menuContribution>
+   </extension>
 </plugin>

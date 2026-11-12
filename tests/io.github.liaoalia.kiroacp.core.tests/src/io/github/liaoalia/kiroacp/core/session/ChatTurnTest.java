@@ -226,7 +226,7 @@ class ChatTurnTest {
 			ToolContentView.Terminal ended = (ToolContentView.Terminal) exec.get(2).content().get(0);
 			assertEquals(ToolStatus.COMPLETED, exec.get(2).status());
 			assertTrue(ended.output().contains("hello"), ended.toString());
-			assertEquals(0, ended.exitCode());
+			assertEquals(0, ended.exitCode().asInt(-1));
 			assertEquals(running.terminalId(), ended.terminalId());
 
 			// The edit: its diff, the question, the answer, then the agent goes on.
