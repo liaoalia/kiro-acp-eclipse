@@ -94,6 +94,9 @@ public final class CliPathResolver {
 			List<String> out = new ArrayList<>();
 			out.add(join('\\', programFiles == null ? "C:\\Program Files" : programFiles, "Kiro-Cli", "kiro-cli.exe"));
 			if (localAppData != null) {
+				// Where the 3.2 installer puts it (seen 2026-11-12); an Eclipse started
+				// before the install does not have it on its PATH yet.
+				out.add(join('\\', localAppData, "Kiro-Cli", "kiro-cli.exe"));
 				out.add(join('\\', localAppData, "Programs", "Kiro-Cli", "kiro-cli.exe"));
 			}
 			return out;

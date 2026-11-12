@@ -14,11 +14,11 @@ jobs:
     # The chat page test needs a real browser widget; WebView2 comes with the Windows image.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -37,6 +37,9 @@ jobs:
         run: |
           zip=$(ls releng/io.github.liaoalia.kiroacp.site/target/io.github.liaoalia.kiroacp.site-*.zip)
           cp "$zip" "kiro-acp-eclipse-${GITHUB_REF_NAME}.zip"
+      - name: Failed tests
+        if: failure()
+        run: python scripts/ci-failed-tests.py
       - name: Test reports
         if: failure()
         uses: actions/upload-artifact@v4

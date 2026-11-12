@@ -97,6 +97,14 @@ class CliPathResolverTest {
 	}
 
 	@Test
+	void findsTheInstallerLocationDirectlyUnderLocalAppData() {
+		Map<String, String> env = Map.of("PATH", "C:\\nothing", "LOCALAPPDATA", "C:\\Users\\me\\AppData\\Local");
+		String installed = "C:\\Users\\me\\AppData\\Local\\Kiro-Cli\\kiro-cli.exe";
+
+		assertEquals(installed, CliPathResolver.resolve("kiro-cli", Platform.WINDOWS, env, existing(installed)));
+	}
+
+	@Test
 	void fallsBackToTheMacDefaultInstallLocations() {
 		String result = CliPathResolver.resolve("kiro-cli", Platform.MAC, Map.of("PATH", "/usr/bin", "HOME", "/Users/me"),
 				existing("/Users/me/.local/bin/kiro-cli"));

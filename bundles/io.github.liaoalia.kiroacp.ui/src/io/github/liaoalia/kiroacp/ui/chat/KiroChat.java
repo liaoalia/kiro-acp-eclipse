@@ -9,6 +9,7 @@ import org.osgi.framework.FrameworkUtil;
 
 import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.ChatHost;
+import io.github.liaoalia.kiroacp.core.session.SignInFlow;
 import io.github.liaoalia.kiroacp.ui.services.ConsoleTerminalDisplay;
 import io.github.liaoalia.kiroacp.ui.services.DialogPrompts;
 import io.github.liaoalia.kiroacp.ui.services.DisplayScheduler;
@@ -44,6 +45,7 @@ public final class KiroChat {
 				new EclipseTextFiles(display, prompts, logger), new ConsoleTerminalDisplay(),
 				new EclipseExternalActions(prompts, logger), new EclipseChatActions(logger), version());
 		controller = ChatController.create(host);
+		SignInFlow.install(controller);
 	}
 
 	/** @return the shared instance, created on first use */
