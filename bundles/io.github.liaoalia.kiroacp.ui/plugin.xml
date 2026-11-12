@@ -6,6 +6,7 @@
       <view
             id="io.github.liaoalia.kiroacp.chat"
             name="Kiro Chat"
+            icon="icons/kiro.png"
             category="io.github.liaoalia.kiroacp"
             class="io.github.liaoalia.kiroacp.ui.chat.ChatView"
             allowMultiple="true"

@@ -7,6 +7,10 @@
    <description>
       Chat with the Kiro agent inside Eclipse over the Agent Client Protocol (ACP).
    </description>
+   <!-- Jackson is not part of every Eclipse package, so it travels with the feature. -->
+   <plugin id="com.fasterxml.jackson.core.jackson-annotations" version="0.0.0"/>
+   <plugin id="com.fasterxml.jackson.core.jackson-core" version="0.0.0"/>
+   <plugin id="com.fasterxml.jackson.core.jackson-databind" version="0.0.0"/>
    <plugin id="io.github.liaoalia.kiroacp.core" version="0.0.0"/>
    <plugin id="io.github.liaoalia.kiroacp.ui" version="0.0.0"/>
 </feature>

@@ -19,6 +19,7 @@
     <module>tests/io.github.liaoalia.kiroacp.core.tests</module>
     <module>tests/io.github.liaoalia.kiroacp.ui.tests</module>
     <module>features/io.github.liaoalia.kiroacp.feature</module>
+    <module>releng/io.github.liaoalia.kiroacp.site</module>
     <module>releng/io.github.liaoalia.kiroacp.product</module>
   </modules>
 
@@ -43,6 +44,26 @@
               <os>win32</os>
               <ws>win32</ws>
               <arch>x86_64</arch>
+            </environment>
+            <environment>
+              <os>linux</os>
+              <ws>gtk</ws>
+              <arch>x86_64</arch>
+            </environment>
+            <environment>
+              <os>linux</os>
+              <ws>gtk</ws>
+              <arch>aarch64</arch>
+            </environment>
+            <environment>
+              <os>macosx</os>
+              <ws>cocoa</ws>
+              <arch>x86_64</arch>
+            </environment>
+            <environment>
+              <os>macosx</os>
+              <ws>cocoa</ws>
+              <arch>aarch64</arch>
             </environment>
           </environments>
         </configuration>

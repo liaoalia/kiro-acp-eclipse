@@ -20,7 +20,8 @@
 - `new Browser(parent, SWT.EDGE)` loads the page from the plugin's `web/` folder over `file:`; the unmodified webview bundle runs with `webview/host/bridge.js` supplying `acquireVsCodeApi`.
 - Page → Java works through a `BrowserFunction` (`ready` arrived), Java → page through `Browser.execute` (`state` rendered: markdown, fenced code with a copy button, session picker).
 - The page posts `ready` before SWT's load-completed event, so the host must treat the first message as "page is up".
-- Not yet exercised: typing a prompt in the page (streaming `chunk` messages, tool cards), clipboard, links, dark theme, `localStorage` persistence, Linux/macOS.
+- A browser in a shell that is never opened still loads the page and runs its scripts, so UI tests drive the DOM without showing a window or sending input.
+- Not yet exercised: streaming `chunk` messages and tool cards in a test, clipboard, links, dark theme, `localStorage` persistence, Linux/macOS.
 
 ## Decisions
 - **Target**: Eclipse 2024-06 (4.32) and later, `JavaSE-17`. `SWT.EDGE` is passed explicitly because Edge became the default Windows browser only in 4.35.
@@ -74,12 +75,13 @@ Run from the repository root, with `JAVA_HOME` pointing at a JDK 21 or newer (on
 - [x] feature and dev product; the product starts and the view renders a state snapshot
 - [x] `ui.tests` test bundle (JUnit 5) with the `ChatPageLocation` tests
 - [x] the chat page cannot navigate: `LocationListener` veto, no new windows, bridge active only on the page, web links opened outside by the host (found by review round 01)
-- [ ] `core` bundle and `core.tests` test bundle with one trivial test
-- [ ] copy `test/fake-agent/` and `test/recordings/` from the reference into `tests/fixtures/`, with a `package.json` pinning `@agentclientprotocol/sdk`; a test starts the fake agent with `node` and reads its `initialize` response
-- [ ] `ui.tests`: `WebChat` in a `Shell` receives `ready` and renders a posted `state` (assert through `Browser.evaluate` on the DOM); a `prompt` typed through the DOM reaches the host
-- [ ] p2 update site module; build for win32, linux-gtk and macosx; GitHub Actions workflow running the validation commands on `windows-latest`
-- [ ] `scripts/run-dev.ps1` documented in `README.md`; plugin icon as PNG (4.32 has no SVG icon support)
-- [ ] run the validation commands - must pass before task 2
+- [x] `core` bundle and `core.tests` test bundle (`NdjsonCodec` and its tests)
+- [x] `tests/fixtures/sync.mjs` copies `test/fake-agent/agent.mjs` and `test/recordings/` from the reference; `tests/fixtures/fake-agent/package.json` pins `@agentclientprotocol/sdk`; `FakeAgentTest` starts the fake agent with `node` and reads its `initialize` response
+- [x] `ui.tests`: `WebChat` in a `Shell` that is never opened receives `ready` and renders a posted `state` (asserted through `Browser.evaluate` on the DOM); a `prompt` typed through the DOM reaches the host
+- [x] p2 update site module (Jackson travels in the feature); bundles and site resolve for win32, linux-gtk (x86_64, aarch64) and macosx (x86_64, aarch64), the dev product for win32 only; GitHub Actions workflow running the validation commands on `windows-latest`
+- [x] `scripts/run-dev.ps1` documented in `README.md`; view icon as PNG drawn by `scripts/make-icon.py` (4.32 has no SVG icon support); `LICENSE`
+- [x] run the validation commands - must pass before task 2
+- ⚠️ the workflow has not run yet: there is no remote. Whether the `windows-latest` image has the WebView2 runtime that `WebChatTest` needs is unverified.
 
 ### Task 2: Protocol spike - choose the ACP client implementation
 Owns: `core/.../acp/spike/` (deleted at the end of the task), `docs/DECISIONS.md`.
