@@ -2,6 +2,7 @@ package io.github.liaoalia.kiroacp.ui.chat;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -80,6 +81,41 @@ class ChatPageLocationTest {
 	void aFileUrlNamingAnotherHostIsNotThePage() {
 		String path = page.toUri().getRawPath();
 		assertFalse(ChatPageLocation.matches(page, "file://evil.example" + path));
+	}
+
+	private static boolean windows() {
+		return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
+	}
+
+	/** An install on a network share: both spellings of the page's own URL are the page. */
+	@Test
+	void aPageOnAShareMatchesItsOwnUrl() {
+		assumeTrue(windows(), "UNC paths exist on Windows only");
+		Path shared = Path.of("\\\\server\\share\\eclipse\\web\\index.html");
+		// As WebView2 reports it, and as java.io.File.toURI() prints it.
+		assertTrue(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/index.html"));
+		assertTrue(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/index.html?view=x"));
+		assertTrue(ChatPageLocation.matches(shared, "file:////server/share/eclipse/web/index.html"));
+		assertTrue(ChatPageLocation.matches(shared, shared.toFile().toURI().toString()));
+		assertTrue(ChatPageLocation.matches(shared, shared.toUri().toString()));
+	}
+
+	@Test
+	void aPageOnAShareDoesNotMatchAnotherHostShareOrFile() {
+		assumeTrue(windows(), "UNC paths exist on Windows only");
+		Path shared = Path.of("\\\\server\\share\\eclipse\\web\\index.html");
+		assertFalse(ChatPageLocation.matches(shared, "file://other/share/eclipse/web/index.html"));
+		assertFalse(ChatPageLocation.matches(shared, "file://server/other/eclipse/web/index.html"));
+		assertFalse(ChatPageLocation.matches(shared, "file://server/share/eclipse/web/bridge.js"));
+		assertFalse(ChatPageLocation.matches(shared, "file:////other/share/eclipse/web/index.html"));
+		assertFalse(ChatPageLocation.matches(shared, "file:///share/eclipse/web/index.html"));
+	}
+
+	@Test
+	void aLocalPageDoesNotMatchAShareUrl() {
+		String path = page.toUri().getRawPath();
+		assertFalse(ChatPageLocation.matches(page, "file://server" + path));
+		assertFalse(ChatPageLocation.matches(page, "file:////server/share/web/index.html"));
 	}
 
 	@Test

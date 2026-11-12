@@ -128,7 +128,7 @@ Owns: `ui/.../chat/WebChat.java`, `webview/host/`.
 - [ ] clipboard: check `navigator.clipboard` on a `file:` page in WebView2; if unavailable, route copy through a host message handled with SWT `Clipboard`
 - [ ] links: `ui.tests` clicking a web link through the DOM asserts the page did not navigate and the host was asked to open it
 - [ ] theme: re-apply on Eclipse theme change; map more variables from the JFace colour registry; verify the dark theme
-- [ ] persistence: confirm `localStorage` (keyed per view instance by the `view` URL parameter) survives restarts for a `file:` page; otherwise persist the shim's state through the host into the view memento
+- [ ] persistence: confirm `localStorage` (keyed by a random per-instance id kept in the view memento and passed as the `view` URL parameter) survives restarts for a `file:` page; otherwise persist the shim's state through the host into the view memento
 - [ ] page failure: a visible message with a "Reload" action when WebView2 is missing or the page fails to load
 - [ ] focus: `Ctrl+C/V/A` and Eclipse key bindings do not fight inside the composer; `setFocus` lands in the input
 - [ ] `ui.tests` for clipboard, link veto and theme application

@@ -43,6 +43,17 @@ writeFileSync(
   join(staging, "VENDORED.json"),
   JSON.stringify({ from: "kiro-acp-vscode", version, commit }, null, 2) + "\n",
 );
-rmSync(vendor, { recursive: true, force: true });
-renameSync(staging, vendor);
+// Swap by renaming, so vendor/ is whole at every step: the old copy is moved
+// aside, put back if the new one cannot take its place, and only then removed.
+const previous = join(here, "vendor.old");
+rmSync(previous, { recursive: true, force: true });
+const hadVendor = existsSync(vendor);
+if (hadVendor) renameSync(vendor, previous);
+try {
+  renameSync(staging, vendor);
+} catch (error) {
+  if (hadVendor) renameSync(previous, vendor);
+  throw error;
+}
+rmSync(previous, { recursive: true, force: true });
 console.log(`vendored webview ${version} (${commit.slice(0, 7)})`);
