@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension point="org.eclipse.ui.views">
+      <category id="io.github.liaoalia.kiroacp" name="Kiro"/>
+      <view
+            id="io.github.liaoalia.kiroacp.chat"
+            name="Kiro Chat"
+            category="io.github.liaoalia.kiroacp"
+            class="io.github.liaoalia.kiroacp.ui.chat.ChatView"
+            allowMultiple="true"
+            restorable="true"/>
+   </extension>
+   <extension point="org.eclipse.ui.perspectiveExtensions">
+      <perspectiveExtension targetID="*">
+         <view
+               id="io.github.liaoalia.kiroacp.chat"
+               relative="org.eclipse.ui.editorss"
+               relationship="right"
+               ratio="0.62"
+               visible="true"/>
+         <viewShortcut id="io.github.liaoalia.kiroacp.chat"/>
+      </perspectiveExtension>
+   </extension>
+</plugin>

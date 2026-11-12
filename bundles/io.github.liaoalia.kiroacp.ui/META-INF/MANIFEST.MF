@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Kiro ACP Chat
+Bundle-SymbolicName: io.github.liaoalia.kiroacp.ui;singleton:=true
+Bundle-Version: 0.1.0.qualifier
+Bundle-Vendor: liaoalia
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-ActivationPolicy: lazy
+Automatic-Module-Name: io.github.liaoalia.kiroacp.ui
+Require-Bundle: org.eclipse.ui,
+ org.eclipse.core.runtime
+Import-Package: com.fasterxml.jackson.core;version="[2.17.0,3.0.0)",
+ com.fasterxml.jackson.databind;version="[2.17.0,3.0.0)",
+ com.fasterxml.jackson.databind.node;version="[2.17.0,3.0.0)"

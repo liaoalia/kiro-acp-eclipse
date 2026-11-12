@@ -1,0 +1,236 @@
+# Plan: Eclipse plugin "Kiro ACP Chat"
+
+## Overview
+- An Eclipse plugin that spawns `kiro-cli acp` as a child process and talks ACP (JSON-RPC over stdio), a port of the VS Code extension in `M:\Sandbox\vs-code-kiro-plugin` (called "the reference" below; 0.3.10 when vendored).
+- The chat UI is the reference's webview bundle, unchanged, shown in an SWT `Browser` (the approach Amazon Q for Eclipse takes). The host is Java: everything the reference does in `src/acp`, `src/features` and `src/ui/chatController.ts` is re-implemented against Eclipse APIs. No Node at runtime.
+- The contract between the two halves is the reference's JSON message protocol (`src/ui/protocol.ts`, `ToWebview` / `FromWebview`). The Java host must produce and consume exactly those messages.
+- The plugin makes no network calls and has no telemetry; all network access happens inside kiro-cli.
+- Staged: an MVP (chat, streaming, tool cards, cancel, permissions, client fs, simple terminal) first; parity features follow as independent tasks.
+
+## Context (from discovery)
+- Reference layers: `src/acp/*` (~1460 lines, vscode-free), `src/features/pure/*` (~2270 lines, pure logic with tests), `src/ui/chatController.ts` (2599 lines, orchestration), `src/features/{fs,terminal,permissions,diff,plan,context}.ts` (host services), `src/webview/*` + `media/chat.css` (vendored here, not ported).
+- Specification sources in the reference: `docs/DECISIONS.md`, `docs/protocol-notes.md`, `src/ui/protocol.ts`, `test/*.test.ts`, `test/fake-agent/agent.mjs` + `test/recordings/*.json` (fake agent, needs Node), `package.json` (commands and settings to mirror).
+- The reference is under active development (0.3.9 → 0.3.10 during planning), so the webview is vendored by a script and never edited here.
+- ACP Java SDK: `com.agentclientprotocol:acp-java-sdk` on Maven Central, 0.11.0 (2026-05-12) was the newest version found. Not yet tried. Two hazards known from the TypeScript SDK (protocol-notes "SDK notes") must be checked: a typed router that rejects unknown `sessionUpdate` kinds, and notifications overtaken by the `session/prompt` response.
+- Machine: Windows 11, Maven 3.9.12 whose global settings point at an unreachable corporate Nexus (hence `.mvn/settings.xml`), default `JAVA_HOME` is JDK 11; JDK 17.0.10 at `D:\Work\Java\jdk-17.0.10`, OpenJDK 23 at `D:\Work\Java\openjdk-23.0.2`. Node 24 is available. `kiro-cli` may not be installed, so automated verification uses the fake agent.
+
+## Verified by the spike (2026-11-12)
+- Tycho 5.0.3 builds on JDK 23 with bundles targeting `JavaSE-17`; target platform is the Eclipse 4.32 p2 site plus a Maven location for Jackson 2.17.2.
+- A dev product (Eclipse Platform 4.32 + the plugin) is materialised under `releng/io.github.liaoalia.kiroacp.product/target/products/` and runs on JDK 17.
+- `new Browser(parent, SWT.EDGE)` loads the page from the plugin's `web/` folder over `file:`; the unmodified webview bundle runs with `webview/host/bridge.js` supplying `acquireVsCodeApi`.
+- Page → Java works through a `BrowserFunction` (`ready` arrived), Java → page through `Browser.execute` (`state` rendered: markdown, fenced code with a copy button, session picker).
+- The page posts `ready` before SWT's load-completed event, so the host must treat the first message as "page is up".
+- Not yet exercised: typing a prompt in the page (streaming `chunk` messages, tool cards), clipboard, links, dark theme, `localStorage` persistence, Linux/macOS.
+
+## Decisions
+- **Target**: Eclipse 2024-06 (4.32) and later, `JavaSE-17`. `SWT.EDGE` is passed explicitly because Edge became the default Windows browser only in 4.35.
+- **Namespace**: `io.github.liaoalia.kiroacp`.
+- **Chat location**: one `ViewPart`, multiple instances via secondary ids; no separate editor-area chat (D16/D17 of the reference are not reproduced).
+- **Webview**: vendored verbatim under `webview/vendor/` by `webview/sync.mjs`; built by `webview/build.mjs` into the UI bundle's `web/` (git-ignored). Eclipse-specific behaviour goes into `webview/host/` (shim, default theme variables, page), never into `vendor/`.
+- **Theme**: `--vscode-*` variables get defaults in `webview/host/theme.css` (light and dark); the host overrides background, foreground and fonts from Eclipse and picks light/dark from the background's luminance.
+- **JSON**: Jackson tree model at the page boundary; typed view models in `core`.
+- **Protocol layer**: the Java SDK if it passes Task 2, otherwise an own NDJSON JSON-RPC client over Jackson. The rest of the code sees only `core.acp` interfaces.
+- **Not ported**: VS Code tab bookkeeping (D15, D28), webview panel serialisation.
+
+## Repository layout
+```
+pom.xml, .mvn/                           parent, Tycho, plain-Central settings
+target-platform/kiro.target
+webview/                                 sync.mjs, build.mjs, host/, vendor/
+bundles/io.github.liaoalia.kiroacp.core  no SWT/UI imports: acp/, model/, pure/, session/
+bundles/io.github.liaoalia.kiroacp.ui    chat/ (view, WebChat), services/, diff/, prefs/, handlers/
+tests/io.github.liaoalia.kiroacp.core.tests, tests/io.github.liaoalia.kiroacp.ui.tests
+tests/fixtures/fake-agent, tests/fixtures/recordings   copied from the reference
+features/io.github.liaoalia.kiroacp.feature
+releng/io.github.liaoalia.kiroacp.product   dev product (Eclipse + plugin)
+releng/io.github.liaoalia.kiroacp.site      p2 update site
+```
+
+## Development Approach
+- **Testing approach**: Regular (code first, then tests). The protocol layer is tested against the fake agent replaying recordings, so tests need no Kiro login.
+- Every task that changes code adds or updates tests; all tests pass before the next task.
+- `core` must not import `org.eclipse.swt`, `org.eclipse.jface` or `org.eclipse.ui`.
+- The message protocol is the contract: for every `ToWebview` / `FromWebview` type there is a Java model and a JSON round-trip test against a sample produced from the reference types.
+- All SWT access goes through the UI thread; agent I/O never runs on it.
+- Parallel execution: tasks in the same wave touch disjoint packages (listed per task) and may run as parallel subagents.
+- Never send keystrokes or mouse input to the desktop when checking the running product; capture its window only.
+- Update this plan when scope changes (➕ for discovered tasks, ⚠️ for blockers). Record non-obvious choices in `docs/DECISIONS.md`.
+
+## Validation Commands
+Run from the repository root, with `JAVA_HOME` pointing at a JDK 21 or newer (on this machine `D:\Work\Java\openjdk-23.0.2`; CI sets it with `actions/setup-java`):
+- `npm --prefix webview ci` then `npm --prefix webview run build` and `npm --prefix webview run typecheck`
+- `npm --prefix tests/fixtures/fake-agent ci` (from the task that adds the fake agent onwards; the tests that start it fail without it)
+- `mvn -B -ntp verify`
+
+## Implementation Steps
+
+### Wave 0 (serial): foundation
+
+### Task 1: Scaffold, webview vendoring and the Browser spike
+- [x] parent `pom.xml` with Tycho 5.0.3, `.mvn/settings.xml`, `target-platform/kiro.target`
+- [x] `webview/`: `sync.mjs` (vendor from the reference), `build.mjs` (esbuild into the UI bundle), `host/bridge.js`, `host/theme.css`, `host/index.html`
+- [x] UI bundle with the "Kiro Chat" view, `WebChat` (Browser + bridge + theme) and a `DemoHost` with canned replies
+- [x] feature and dev product; the product starts and the view renders a state snapshot
+- [x] `ui.tests` test bundle (JUnit 5) with the `ChatPageLocation` tests
+- [x] the chat page cannot navigate: `LocationListener` veto, no new windows, bridge active only on the page, web links opened outside by the host (found by review round 01)
+- [ ] `core` bundle and `core.tests` test bundle with one trivial test
+- [ ] copy `test/fake-agent/` and `test/recordings/` from the reference into `tests/fixtures/`, with a `package.json` pinning `@agentclientprotocol/sdk`; a test starts the fake agent with `node` and reads its `initialize` response
+- [ ] `ui.tests`: `WebChat` in a `Shell` receives `ready` and renders a posted `state` (assert through `Browser.evaluate` on the DOM); a `prompt` typed through the DOM reaches the host
+- [ ] p2 update site module; build for win32, linux-gtk and macosx; GitHub Actions workflow running the validation commands on `windows-latest`
+- [ ] `scripts/run-dev.ps1` documented in `README.md`; plugin icon as PNG (4.32 has no SVG icon support)
+- [ ] run the validation commands - must pass before task 2
+
+### Task 2: Protocol spike - choose the ACP client implementation
+Owns: `core/.../acp/spike/` (deleted at the end of the task), `docs/DECISIONS.md`.
+- [ ] add `acp-java-sdk` to the target platform (check its transitive dependencies and how it wraps as an OSGi bundle; embedding the jars in `core` is acceptable)
+- [ ] against the fake agent: `initialize`, `session/new`, a streamed prompt (`chat` recording), a permission round-trip, `fs/read_text_file`, `terminal/create`
+- [ ] hazard 1: an unknown `sessionUpdate` kind and a `_kiro/*` notification reach our code instead of being rejected or dropped
+- [ ] hazard 2: every `agent_message_chunk` is delivered before the `session/prompt` response resolves (`slow` recording, repeated runs)
+- [ ] unknown agent requests can be answered with `-32601`; `_meta` fields survive (de)serialisation
+- [ ] write the decision in `docs/DECISIONS.md` (SDK as is, SDK with stream-level interception as the reference does, or own client); keep the checks as tests
+- [ ] run the validation commands - must pass before task 3
+
+### Task 3: Contracts
+Owns: `core/.../acp/api/`, `core/.../model/`, `core/.../host/`.
+- [ ] `acp/api`: `KiroAgent`, `AgentSession`, `SessionEvent`, `ConnectionState`, `ClientServices`, mirroring the reference `src/acp/types.ts`
+- [ ] `model`: Java records for every type in `protocol.ts` (`UiState`, `ToWebview` and `FromWebview` variants, view models) with Jackson mapping
+- [ ] `host`: interfaces the core needs from Eclipse (`Workspace`, `Settings`, `Logger`, `UiScheduler`, `ChatPage` for posting messages) so the controller is testable with fakes
+- [ ] a script in `webview/` that emits one sample JSON per `ToWebview` / `FromWebview` variant, type-checked against the vendored `protocol.ts`; tests round-trip every sample through the Java models
+- [ ] run the validation commands - must pass before wave 1
+
+### Wave 1 (parallel): MVP building blocks
+
+### Task 4: ACP client
+Owns: `core/.../acp/impl/`, `core/.../acp/process/`. Reference: `src/acp/client.ts`, `process.ts`, `stream.ts`, D3, D5, D19.
+- [ ] process launch: resolve the CLI path (PATH plus default install dirs), `.cmd`/`.bat` through `cmd.exe`, inherited environment, stderr to the log, exit and crash handling
+- [ ] connection: `initialize` with client capabilities (fs read/write, terminal, `auth.terminal`, `_meta.kiro.openExternalUrl`), capture agent capabilities, auth methods and `_meta.kiro.extensionMethods`
+- [ ] sessions: new, prompt, cancel (notification plus `cancelled` outcome for pending permissions), set mode, set config option, set model; per-session event stream in wire order
+- [ ] one agent process shared by many sessions; restart
+- [ ] tests against the fake agent, ported from `test/acp-client.test.ts` and `test/process.test.ts`
+- [ ] run the validation commands
+
+### Task 5: Transcript reducer
+Owns: `core/.../pure/transcript/`. Reference: `src/features/pure/transcript.ts`, `test/transcript.test.ts`.
+- [ ] reducer from session updates to the transcript model (messages, thoughts, tool calls with diff and terminal content, plan, modes, config options, commands); unknown kinds are logged, not fatal
+- [ ] port every case of `test/transcript.test.ts`; replay each recording through the reducer without errors
+- [ ] run the validation commands
+
+### Task 6: Pure logic needed by the MVP
+Owns: `core/.../pure/permission/`, `core/.../pure/output/`, `core/.../pure/text/`. Reference: `permissionPolicy.ts`, `outputBuffer.ts`, `textRange.ts`, `terminalPresentation.ts` and their tests.
+- [ ] permission policy with the three scopes and kind resolution (D6, D23)
+- [ ] output buffer with a byte limit truncating from the start on a character boundary (D9)
+- [ ] text range slicing; terminal presentation
+- [ ] port the cases of the four matching test files
+- [ ] run the validation commands
+
+### Task 7: Chat page hardening
+Owns: `ui/.../chat/WebChat.java`, `webview/host/`.
+- [ ] clipboard: check `navigator.clipboard` on a `file:` page in WebView2; if unavailable, route copy through a host message handled with SWT `Clipboard`
+- [ ] links: `ui.tests` clicking a web link through the DOM asserts the page did not navigate and the host was asked to open it
+- [ ] theme: re-apply on Eclipse theme change; map more variables from the JFace colour registry; verify the dark theme
+- [ ] persistence: confirm `localStorage` (keyed per view instance by the `view` URL parameter) survives restarts for a `file:` page; otherwise persist the shim's state through the host into the view memento
+- [ ] page failure: a visible message with a "Reload" action when WebView2 is missing or the page fails to load
+- [ ] focus: `Ctrl+C/V/A` and Eclipse key bindings do not fight inside the composer; `setFocus` lands in the input
+- [ ] `ui.tests` for clipboard, link veto and theme application
+- [ ] run the validation commands
+
+### Wave 2 (serial after wave 1): MVP
+
+### Task 8: Host services
+Owns: `ui/.../services/`. Reference: `src/features/fs.ts`, `terminal.ts`, `permissions.ts`, `services.ts`, D8, D9.
+- [ ] fs: read from open dirty editors first, else disk; writes through the document or `IFile`; path must be absolute and inside workspace roots, else ask
+- [ ] terminal: `ProcessBuilder` through the platform shell, retained output via the Task 6 buffer, output/wait/kill/release semantics, mirrored into one `MessageConsole` per session (`shared`) or none (`hidden`)
+- [ ] permissions: pending-request registry, resolution from the chat card, cancel-all on turn cancel
+- [ ] `host` implementations: `Workspace`, `Settings` (preference store), `Logger` (a "Kiro ACP" console plus the Eclipse log), `UiScheduler`
+- [ ] tests: fs against a temporary workspace project; terminal echo, exit code, kill, byte limit; permission registry
+- [ ] run the validation commands
+
+### Task 9: Chat controller and view wiring
+Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../prefs/`, `ui/.../handlers/`, `plugin.xml`. Reference: `src/ui/chatController.ts`, `src/extension.ts`.
+- [ ] controller in `core`: owns the agent, sessions per view, transcript state, turn lifecycle, local echo of user messages (D13), local-first Stop (D27); answers `ready` with a `state` snapshot and emits incremental `ToWebview` messages
+- [ ] handles the MVP `FromWebview` messages: `prompt`, `cancel`, `newSession`, `permissionResponse`, `setMode`, `setConfigOption`, `setModel`, `restart`, `showLog`, `openFile`, `showTerminal`
+- [ ] `ChatView` binds the controller to `WebChat`; `DemoHost` is deleted
+- [ ] commands: New Session, Cancel Current Turn, Restart Agent Process, Show Protocol Log, Focus Chat; preference page: CLI path, CLI arguments, terminal mode, output byte limit, log protocol
+- [ ] controller tests in `core.tests` with the fake agent and fake hosts: the message sequence for a chat turn, cancel, permission allow/reject, restart after crash
+- [ ] `ui.tests`: the view against the fake agent, a prompt typed through the DOM, the streamed reply and a tool card present in the DOM
+- [ ] run the validation commands
+
+### Task 10: Verify the MVP
+- [ ] streaming chat, tool cards, cancel, new session, permissions, fs read/write and terminal all pass in the UI test run against the fake agent
+- [ ] `core` has no SWT/JFace/UI imports (build check)
+- [ ] run the validation commands
+
+### Wave 3 (parallel): parity features
+Each task owns one package in `core` and one in `ui`, handles its own `FromWebview` messages in a separate handler class registered with the controller, and is merged one at a time.
+
+### Task 11: Diff review in the Compare editor
+Owns: `core/.../pure/diff/`, `ui/.../diff/`. Reference: `src/features/diff.ts`, `pure/diffState.ts`, D7.
+- [ ] diff bookkeeping port with the `features-diffState` test cases
+- [ ] `openDiff` opens a `CompareEditorInput` (original vs. proposed, proposed side editable) with Accept and Reject in its toolbar; both resolve the pending permission, as do the chat card buttons
+- [ ] the edited proposed text is what gets written; `autoOpenDiffs` preference; compare editors close on resolution
+- [ ] tests ported from `test/e2e/f2-diff.e2e.ts`
+- [ ] run the validation commands
+
+### Task 12: File, selection and image context
+Owns: `core/.../pure/context/`, `ui/.../context/`. Reference: `src/features/context.ts`, `pure/contentBlocks.ts`, `pure/fileSearch.ts`, `src/ui/images.ts`, D10.
+- [ ] content block builders and file search ranking with the reference test cases
+- [ ] `queryFiles` → `fileSuggestions`, `removeChip`, active-editor chip (`attachActiveFile`), "Send Selection to Kiro Chat" command with `Ctrl+Alt+K`
+- [ ] `pickImages` and `dropFiles` → `imagesAttached`, with the reference size and type limits
+- [ ] tests: selection chip block, suggestion list for a sample project, image rejection reasons
+- [ ] run the validation commands
+
+### Task 13: Sessions and history
+Owns: `core/.../session/history/`, `ui/.../sessions/`. Reference: D19–D21, D24, `f10-sessions`, `f11-history` e2e.
+- [ ] `selectSession`, `closeSession`, `sessions` updates; closing the view ends its sessions
+- [ ] `browseSessions`: a JFace dialog over `session/list`, then `session/load` replayed into the transcript
+- [ ] remember mode, model and config options across sessions; "Forget Remembered Session Options" command
+- [ ] tests ported from the two e2e files
+- [ ] run the validation commands
+
+### Task 14: Steering and queued prompts
+Owns: `core/.../session/steering/`. Reference: D22, `f12-steering` e2e.
+- [ ] a prompt during a turn is steered when the agent advertises it, else queued; `messageDelivery` updates
+- [ ] tests with the `slow-steer` and `slow` recordings
+- [ ] run the validation commands
+
+### Task 15: Sign-in flow
+Owns: `core/.../session/auth/`, `ui/.../auth/`. Reference: D25, `src/features/services.ts`, `f14-login` e2e.
+- [ ] sign-in offered from any "not logged in" failure; signed out means `logout` then one fresh terminal sign-in, never a token refresh
+- [ ] `login` runs the CLI in a terminal the user can type into (TM Terminal if installed, otherwise an external terminal window); `_kiro/openExternalUrl` opens the system browser after confirming the host
+- [ ] tests with the fake agent's `--auth-required`
+- [ ] run the validation commands
+
+### Task 16: Slash commands, usage and plan document
+Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui/.../plan/`. Reference: D11, D18, D26.
+- [ ] client-side slash command routing; `usage` messages; both with the reference test cases
+- [ ] `openPlan`: the plan as markdown in a read-only editor that updates live; Approve/Reject for `switch_mode` requests
+- [ ] run the validation commands
+
+### Wave 4 (serial): finish
+
+### Task 17: Verify acceptance criteria
+- [ ] every `FromWebview` type is handled and every `ToWebview` type is emitted somewhere (a test enumerates the vendored protocol samples)
+- [ ] every row of the reference verification table has a passing automated test here against the fake agent
+- [ ] every setting and command of the reference `package.json` is implemented or listed as not ported in `docs/DECISIONS.md`
+- [ ] re-vendoring the webview from the current reference still builds and passes
+- [ ] run the validation commands
+
+### Task 18: Packaging and documentation
+- [ ] feature metadata, licence (MIT), update site categories; CI uploads the site and attaches it to a release on a `v*` tag
+- [ ] `README.md`: install, settings, commands, pointing the plugin at the fake agent, how to re-vendor the webview
+- [ ] `docs/protocol-notes.md`: what was verified with the Java client
+- [ ] run the validation commands
+
+## Technical Details
+- Page bridge: page → host is `window.__kiroHost(json)` (a `BrowserFunction`, handled with `asyncExec` so the browser is never re-entered from its own callback); host → page is `Browser.execute("window.__kiroReceive(<json>)")`, which dispatches a `message` event like VS Code does.
+- Threading: one reader thread per agent process parses NDJSON and dispatches in wire order to a single-threaded session executor; the controller reduces events there and posts messages to the UI thread, coalescing `chunk` bursts.
+- Fake agent in tests: `node tests/fixtures/fake-agent/agent.mjs acp --scenario <name>`; it imports `@agentclientprotocol/sdk`, so the fixtures folder has its own `package.json` and `npm ci` runs before the tests.
+
+## Post-Completion
+**Manual verification**
+- Install the update site into a real Eclipse (2024-06 and current), light and dark theme; walk through chat, diff accept with an edit, terminal, sign-in.
+- Run against a real `kiro-cli acp` after `kiro-cli login`.
+- Linux (WebKitGTK) and macOS (WKWebView): the page, the bridge and `file:` loading are only verified on Windows/WebView2.
+
+**External**
+- Create the GitHub repository and push; decide whether to publish to the Eclipse Marketplace.
