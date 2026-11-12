@@ -117,8 +117,7 @@ Owns: `core/.../acp/impl/`, `core/.../acp/process/`. Reference: `src/acp/client.
 Owns: `core/.../pure/transcript/`. Reference: `src/features/pure/transcript.ts`, `test/transcript.test.ts`.
 - [x] reducer from session updates to the transcript model (messages, thoughts, tool calls with diff and terminal content, plan, modes, config options, commands); unknown kinds are logged, not fatal (the reducer is pure: it returns the reason in `ApplyResult.ignored()` and the caller logs it)
 - [x] port every case of `test/transcript.test.ts`; replay each recording through the reducer without errors
-- [ ] run the validation commands
-- ⚠️ only `mvn -B -ntp -o verify -pl bundles/io.github.liaoalia.kiroacp.core,tests/io.github.liaoalia.kiroacp.core.tests` was run in the task's worktree (80 tests pass); the full `mvn verify` with the UI tests and the webview commands were not.
+- [x] run the validation commands (full build on `main` after the merge; the `pure.*` packages are exported from the core bundle)
 
 ### Task 6: Pure logic needed by the MVP
 Owns: `core/.../pure/permission/`, `core/.../pure/output/`, `core/.../pure/text/`. Reference: `permissionPolicy.ts`, `outputBuffer.ts`, `textRange.ts`, `terminalPresentation.ts` and their tests.
@@ -126,9 +125,7 @@ Owns: `core/.../pure/permission/`, `core/.../pure/output/`, `core/.../pure/text/
 - [x] output buffer with a byte limit truncating from the start on a character boundary (D9)
 - [x] text range slicing; terminal presentation
 - [x] port the cases of the four matching test files
-- [ ] run the validation commands
-- ⚠️ only the scoped build ran in the task worktree: `mvn -B -ntp -o verify -pl bundles/io.github.liaoalia.kiroacp.core,tests/io.github.liaoalia.kiroacp.core.tests` passes (107 tests); the webview build and the full `mvn verify` with `ui.tests` were not run here.
-- ➕ the packages `core.pure.permission`, `core.pure.output` and `core.pure.text` are not in `Export-Package` of the core bundle (the manifest is outside this task): the UI bundle cannot see them until they are exported (Task 8).
+- [x] run the validation commands (full build on `main` after the merge; the `pure.*` packages are exported from the core bundle)
 
 ### Task 7: Chat page hardening
 Owns: `ui/.../chat/WebChat.java`, `webview/host/`.

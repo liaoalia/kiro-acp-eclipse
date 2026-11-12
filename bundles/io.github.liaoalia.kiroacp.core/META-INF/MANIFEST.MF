@@ -10,7 +10,11 @@ Export-Package: io.github.liaoalia.kiroacp.core.acp,
  io.github.liaoalia.kiroacp.core.acp.api,
  io.github.liaoalia.kiroacp.core.acp.rpc,
  io.github.liaoalia.kiroacp.core.host,
- io.github.liaoalia.kiroacp.core.model
+ io.github.liaoalia.kiroacp.core.model,
+ io.github.liaoalia.kiroacp.core.pure.output,
+ io.github.liaoalia.kiroacp.core.pure.permission,
+ io.github.liaoalia.kiroacp.core.pure.text,
+ io.github.liaoalia.kiroacp.core.pure.transcript
 Import-Package: com.fasterxml.jackson.annotation;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.core;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.databind;version="[2.17.0,3.0.0)",
