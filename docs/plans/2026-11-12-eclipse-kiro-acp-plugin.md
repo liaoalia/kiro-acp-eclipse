@@ -145,13 +145,16 @@ Owns: `ui/.../chat/WebChat.java`, `webview/host/`.
 ### Wave 2 (serial after wave 1): MVP
 
 ### Task 8: Host services
-Owns: `ui/.../services/`. Reference: `src/features/fs.ts`, `terminal.ts`, `permissions.ts`, `services.ts`, D8, D9.
-- [ ] fs: read from open dirty editors first, else disk; writes through the document or `IFile`; path must be absolute and inside workspace roots, else ask
-- [ ] terminal: `ProcessBuilder` through the platform shell, retained output via the Task 6 buffer, output/wait/kill/release semantics, mirrored into one `MessageConsole` per session (`shared`) or none (`hidden`)
-- [ ] permissions: pending-request registry, resolution from the chat card, cancel-all on turn cancel
-- [ ] `host` implementations: `Workspace`, `Settings` (preference store), `Logger` (a "Kiro ACP" console plus the Eclipse log), `UiScheduler`
-- [ ] tests: fs against a temporary workspace project; terminal echo, exit code, kill, byte limit; permission registry
-- [ ] run the validation commands
+Owns: `core/.../services/` (logic, no Eclipse), `ui/.../services/`, `ui/.../prefs/` (Eclipse adapters). Reference: `src/features/fs.ts`, `terminal.ts`, `permissions.ts`, `services.ts`, D8, D9. Split so the logic is tested without Eclipse: everything that needs the IDE sits behind `TextFiles`, `TerminalDisplay` and `ExternalActions`.
+- [x] core `FsService`: `fs/read_text_file` with line/limit, `fs/write_text_file`; absolute paths only; a write outside the workspace roots asks first; `DiskTextFiles` as the disk-only `TextFiles`
+- [x] core `TerminalService`: `ProcessBuilder` through the platform shell, retained output via the Task 6 buffer, output/wait/kill/release semantics, process-tree kill, per-session kill; agent terminals take no input (stdin closed)
+- [x] core `PermissionManager`: pending-request registry, session policies in three scopes, resolution from the chat card, cancel-all on turn cancel
+- [x] core `HostServices` composes them into `ClientServices` (`_kiro/openExternalUrl` and terminal sign-in through `ExternalActions`)
+- [x] ui `host` implementations: `EclipseWorkspace`, `PreferenceSettings` with the "Kiro ACP Chat" preference page, `EclipseLogger` (a "Kiro ACP" console plus the Eclipse log), `DisplayScheduler`
+- [x] tests: fs against a temporary directory; terminal echo, exit code, kill, byte limit; permission registry; the fake agent's `tour` through the real services; workspace, settings, logger, scheduler and preference page in `ui.tests`
+- [x] run the validation commands (full build on `main` after the merge, two runs)
+- [ ] ➕ ui adapters, done with Task 9: `TextFiles` over open editors and `IFile`, `TerminalDisplay` over `MessageConsole`, `ExternalActions` (confirm and open a URL; sign-in in a terminal)
+- ⚠️ unverified: nothing ran on Linux/macOS (signal mapping, POSIX tree kill); the "Kiro ACP" console and the active-editor tracking need a running workbench and were not exercised; the preference page was never seen in the real dialog
 
 ### Task 9: Chat controller and view wiring
 Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../prefs/`, `ui/.../handlers/`, `plugin.xml`. Reference: `src/ui/chatController.ts`, `src/extension.ts`.
