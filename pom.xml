@@ -14,7 +14,9 @@
   </properties>
 
   <modules>
+    <module>bundles/io.github.liaoalia.kiroacp.core</module>
     <module>bundles/io.github.liaoalia.kiroacp.ui</module>
+    <module>tests/io.github.liaoalia.kiroacp.core.tests</module>
     <module>tests/io.github.liaoalia.kiroacp.ui.tests</module>
     <module>features/io.github.liaoalia.kiroacp.feature</module>
     <module>releng/io.github.liaoalia.kiroacp.product</module>

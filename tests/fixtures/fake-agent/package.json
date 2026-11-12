@@ -1,0 +1,9 @@
+{
+  "name": "kiroacp-eclipse-fake-agent",
+  "private": true,
+  "type": "module",
+  "description": "Fake Kiro ACP agent for the tests; agent.mjs and ../recordings are copied from the reference by ../sync.mjs.",
+  "dependencies": {
+    "@agentclientprotocol/sdk": "2.5.0"
+  }
+}
