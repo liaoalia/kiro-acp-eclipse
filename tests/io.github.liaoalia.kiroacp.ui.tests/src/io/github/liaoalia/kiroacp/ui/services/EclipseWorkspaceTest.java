@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -100,7 +101,9 @@ class EclipseWorkspaceTest {
 	}
 
 	@Test
-	void aProjectKeptElsewhereIsLabelledByItsNameNotItsFolder(@TempDir Path elsewhere) throws CoreException {
+	void aProjectKeptElsewhereIsLabelledByItsNameNotItsFolder(@TempDir Path temp) throws CoreException, IOException {
+		// The temp folder may be spelled with a short (8.3) name; Eclipse reports locations with the long one.
+		Path elsewhere = temp.toRealPath();
 		Path folder = elsewhere.resolve("checkout-folder");
 		IProject linked = resources.getRoot().getProject("named");
 		IProjectDescription description = resources.newProjectDescription("named");
@@ -118,7 +121,9 @@ class EclipseWorkspaceTest {
 	}
 
 	@Test
-	void aPathInANestedProjectBelongsToTheInnerOne(@TempDir Path elsewhere) throws CoreException {
+	void aPathInANestedProjectBelongsToTheInnerOne(@TempDir Path temp) throws CoreException, IOException {
+		// The temp folder may be spelled with a short (8.3) name; Eclipse reports locations with the long one.
+		Path elsewhere = temp.toRealPath();
 		IProject outer = resources.getRoot().getProject("outer");
 		IProjectDescription outerDescription = resources.newProjectDescription("outer");
 		outerDescription.setLocationURI(elsewhere.resolve("outer").toUri());

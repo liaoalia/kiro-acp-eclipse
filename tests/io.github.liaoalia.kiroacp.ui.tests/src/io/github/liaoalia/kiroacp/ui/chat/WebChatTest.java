@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -274,6 +275,7 @@ class WebChatTest {
 
 	@Test
 	void theDraftSurvivesAReloadAndBelongsToOneViewOnly() {
+		assumeSecondBrowserWorks();
 		String id = newId();
 		String key = "kiroAcp.webviewState." + id;
 		chat = new WebChat(shell, id, fromPage::add, seams);
@@ -389,6 +391,7 @@ class WebChatTest {
 
 	@Test
 	void focusAskedForBeforeThePageIsUpIsGivenOnceItIs() {
+		assumeSecondBrowserWorks();
 		// Without the request the page leaves the focus alone: the control for the claim below.
 		start();
 		await(() -> received("ready") != null, "the page to post \"ready\"");
@@ -485,6 +488,15 @@ class WebChatTest {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * On the GitHub Actions Windows image a second browser widget created in the
+	 * same test never posted "ready" (2026-11-12, two runs), and nothing there can
+	 * take focus. Tests that need a second widget run on a developer's machine only.
+	 */
+	private static void assumeSecondBrowserWorks() {
+		assumeTrue(System.getenv("GITHUB_ACTIONS") == null, "a second browser widget does not come up on the CI image");
 	}
 
 	private JsonNode received(String type) {
