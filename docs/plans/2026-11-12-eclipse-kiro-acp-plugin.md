@@ -11,7 +11,7 @@
 - Reference layers: `src/acp/*` (~1460 lines, vscode-free), `src/features/pure/*` (~2270 lines, pure logic with tests), `src/ui/chatController.ts` (2599 lines, orchestration), `src/features/{fs,terminal,permissions,diff,plan,context}.ts` (host services), `src/webview/*` + `media/chat.css` (vendored here, not ported).
 - Specification sources in the reference: `docs/DECISIONS.md`, `docs/protocol-notes.md`, `src/ui/protocol.ts`, `test/*.test.ts`, `test/fake-agent/agent.mjs` + `test/recordings/*.json` (fake agent, needs Node), `package.json` (commands and settings to mirror).
 - The reference is under active development (0.3.9 → 0.3.10 during planning), so the webview is vendored by a script and never edited here.
-- ACP Java SDK: `com.agentclientprotocol:acp-java-sdk` on Maven Central, 0.11.0 (2026-05-12) was the newest version found. Not yet tried. Two hazards known from the TypeScript SDK (protocol-notes "SDK notes") must be checked: a typed router that rejects unknown `sessionUpdate` kinds, and notifications overtaken by the `session/prompt` response.
+- ACP Java SDK: `com.agentclientprotocol:acp-core` on Maven Central (0.11.0 of 2026-05-12, newest 0.81.0 of 2026-11-10). Examined in Task 2 and not used. Two hazards known from the TypeScript SDK (protocol-notes "SDK notes") must be checked: a typed router that rejects unknown `sessionUpdate` kinds, and notifications overtaken by the `session/prompt` response.
 - Machine: Windows 11, Maven 3.9.12 whose global settings point at an unreachable corporate Nexus (hence `.mvn/settings.xml`), default `JAVA_HOME` is JDK 11; JDK 17.0.10 at `D:\Work\Java\jdk-17.0.10`, OpenJDK 23 at `D:\Work\Java\openjdk-23.0.2`. Node 24 is available. `kiro-cli` may not be installed, so automated verification uses the fake agent.
 
 ## Verified by the spike (2026-11-12)
@@ -30,7 +30,7 @@
 - **Webview**: vendored verbatim under `webview/vendor/` by `webview/sync.mjs`; built by `webview/build.mjs` into the UI bundle's `web/` (git-ignored). Eclipse-specific behaviour goes into `webview/host/` (shim, default theme variables, page), never into `vendor/`.
 - **Theme**: `--vscode-*` variables get defaults in `webview/host/theme.css` (light and dark); the host overrides background, foreground and fonts from Eclipse and picks light/dark from the background's luminance.
 - **JSON**: Jackson tree model at the page boundary; typed view models in `core`.
-- **Protocol layer**: the Java SDK if it passes Task 2, otherwise an own NDJSON JSON-RPC client over Jackson. The rest of the code sees only `core.acp` interfaces.
+- **Protocol layer**: an own NDJSON JSON-RPC client over Jackson (`core.acp.rpc`), not the ACP Java SDK; reasons in `docs/DECISIONS.md` D1. The rest of the code sees only `core.acp` interfaces.
 - **Local installs only**: the chat page must be on a local drive. From a network share (`\\server\share`) the view shows a message instead of the chat, because `file:` URLs name another machine in too many ways to tell the page from a foreign document reliably.
 - **Not ported**: VS Code tab bookkeeping (D15, D28), webview panel serialisation.
 
@@ -84,14 +84,15 @@ Run from the repository root, with `JAVA_HOME` pointing at a JDK 21 or newer (on
 - ⚠️ the workflow has not run yet: there is no remote. Whether the `windows-latest` image has the WebView2 runtime that `WebChatTest` needs is unverified.
 
 ### Task 2: Protocol spike - choose the ACP client implementation
-Owns: `core/.../acp/spike/` (deleted at the end of the task), `docs/DECISIONS.md`.
-- [ ] add `acp-java-sdk` to the target platform (check its transitive dependencies and how it wraps as an OSGi bundle; embedding the jars in `core` is acceptable)
-- [ ] against the fake agent: `initialize`, `session/new`, a streamed prompt (`chat` recording), a permission round-trip, `fs/read_text_file`, `terminal/create`
-- [ ] hazard 1: an unknown `sessionUpdate` kind and a `_kiro/*` notification reach our code instead of being rejected or dropped
-- [ ] hazard 2: every `agent_message_chunk` is delivered before the `session/prompt` response resolves (`slow` recording, repeated runs)
-- [ ] unknown agent requests can be answered with `-32601`; `_meta` fields survive (de)serialisation
-- [ ] write the decision in `docs/DECISIONS.md` (SDK as is, SDK with stream-level interception as the reference does, or own client); keep the checks as tests
-- [ ] run the validation commands - must pass before task 3
+Owns: `core/.../acp/rpc/`, `docs/DECISIONS.md`. Outcome: own client (DECISIONS D1, D2); the SDK was examined from its sources and with a probe outside this repository, not added to the target platform.
+- [x] examine `acp-java-sdk` (0.11.0 is a parent POM; the client is `acp-core`): dependencies, OSGi metadata, client API, both hazards; 0.81.0 compared
+- [x] `JsonRpcConnection` (NDJSON JSON-RPC over two streams, messages as JSON trees) with `JsonRpcConnectionTest`
+- [x] against the fake agent: `initialize`, `session/new`, a streamed prompt (`chat` recording), a permission round-trip, `fs/read_text_file`, `terminal/create` (`tour` recording)
+- [x] hazard 1: an unknown `sessionUpdate` kind and a `_kiro/*` notification reach our code instead of being rejected or dropped
+- [x] hazard 2: every `agent_message_chunk` is delivered before the `session/prompt` response resolves (`slow` recording, five runs)
+- [x] unknown agent requests are answered with `-32601`; `_meta` fields survive
+- [x] write the decision in `docs/DECISIONS.md`; the checks stay as `FakeAgentProtocolTest`
+- [x] run the validation commands - must pass before task 3
 
 ### Task 3: Contracts
 Owns: `core/.../acp/api/`, `core/.../model/`, `core/.../host/`.
