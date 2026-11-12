@@ -12,7 +12,7 @@
 - Specification sources in the reference: `docs/DECISIONS.md`, `docs/protocol-notes.md`, `src/ui/protocol.ts`, `test/*.test.ts`, `test/fake-agent/agent.mjs` + `test/recordings/*.json` (fake agent, needs Node), `package.json` (commands and settings to mirror).
 - The reference is under active development (0.3.9 → 0.3.10 during planning), so the webview is vendored by a script and never edited here.
 - ACP Java SDK: `com.agentclientprotocol:acp-core` on Maven Central (0.11.0 of 2026-05-12, newest 0.81.0 of 2026-11-10). Examined in Task 2 and not used. Two hazards known from the TypeScript SDK (protocol-notes "SDK notes") must be checked: a typed router that rejects unknown `sessionUpdate` kinds, and notifications overtaken by the `session/prompt` response.
-- Machine: Windows 11, Maven 3.9.12 whose global settings point at an unreachable corporate Nexus (hence `.mvn/settings.xml`), default `JAVA_HOME` is JDK 11; JDK 17.0.10 at `D:\Work\Java\jdk-17.0.10`, OpenJDK 23 at `D:\Work\Java\openjdk-23.0.2`. Node 24 is available. `kiro-cli` may not be installed, so automated verification uses the fake agent.
+- Machine: Windows 11, Maven 3.9.12 whose global settings do not reach Maven Central (hence `.mvn/settings.xml`), default `JAVA_HOME` is JDK 11; JDK 17.0.10 at `D:\Work\Java\jdk-17.0.10`, OpenJDK 23 at `D:\Work\Java\openjdk-23.0.2`. Node 24 is available. `kiro-cli` may not be installed, so automated verification uses the fake agent.
 
 ## Verified by the spike (2026-11-12)
 - Tycho 5.0.3 builds on JDK 23 with bundles targeting `JavaSE-17`; target platform is the Eclipse 4.32 p2 site plus a Maven location for Jackson 2.17.2.
@@ -157,14 +157,17 @@ Owns: `core/.../services/` (logic, no Eclipse), `ui/.../services/`, `ui/.../pref
 - ⚠️ unverified: nothing ran on Linux/macOS (signal mapping, POSIX tree kill); the "Kiro ACP" console and the active-editor tracking need a running workbench and were not exercised; the preference page was never seen in the real dialog
 
 ### Task 9: Chat controller and view wiring
-Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../prefs/`, `ui/.../handlers/`, `plugin.xml`. Reference: `src/ui/chatController.ts`, `src/extension.ts`.
-- [ ] controller in `core`: owns the agent, sessions per view, transcript state, turn lifecycle, local echo of user messages (D13), local-first Stop (D27); answers `ready` with a `state` snapshot and emits incremental `ToWebview` messages
-- [ ] handles the MVP `FromWebview` messages: `prompt`, `cancel`, `newSession`, `permissionResponse`, `setMode`, `setConfigOption`, `setModel`, `restart`, `showLog`, `openFile`, `showTerminal`
-- [ ] `ChatView` binds the controller to `WebChat`; `DemoHost` is deleted
-- [ ] commands: New Session, Cancel Current Turn, Restart Agent Process, Show Protocol Log, Focus Chat; preference page: CLI path, CLI arguments, terminal mode, output byte limit, log protocol
-- [ ] controller tests in `core.tests` with the fake agent and fake hosts: the message sequence for a chat turn, cancel, permission allow/reject, restart after crash
+Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../chat/KiroChat.java`, `ui/.../handlers/`, `plugin.xml`. Reference: `src/ui/chatController.ts`, `src/extension.ts`.
+- [x] controller in `core`: owns the agent, sessions per view, transcript state, turn lifecycle, local echo of user messages (D13); answers `ready` with a `state` snapshot and emits incremental `ToWebview` messages. Stop follows the reference (D27): permissions cancelled and terminals killed at once, the turn ends when the agent answers or after a 5 s watchdog
+- [x] handles the MVP `FromWebview` messages: `prompt`, `cancel`, `newSession`, `selectSession`, `closeSession`, `permissionResponse`, `permissionAlways`, `setMode`, `setConfigOption`, `setModel`, `restart`, `showLog`, `openFile`, `showTerminal`; everything else goes to handlers registered through `ChatHooks` (the seams for wave 3)
+- [x] ui adapters: `EclipseTextFiles` (file buffers), `ConsoleTerminalDisplay`, `EclipseExternalActions` (confirm and open a URL; sign-in in an external terminal window through a generated script)
+- [x] `KiroChat` holds one controller per workbench; `ChatView` binds it to `WebChat`; `DemoHost` is deleted
+- [x] commands: New Session, Cancel Current Turn, Restart Agent Process, Show Protocol Log, Focus Chat; preference page (Task 8)
+- [x] controller tests in `core.tests` with the fake agent and fake hosts: the message sequence for a chat turn, the tour, cancel, permission allow/reject and policies, restart after crash, sessions
+- [x] smoke check by hand: the dev product with the CLI path pointed at the fake agent connects and shows the session (window capture, 2026-11-12)
 - [ ] `ui.tests`: the view against the fake agent, a prompt typed through the DOM, the streamed reply and a tool card present in the DOM
-- [ ] run the validation commands
+- [x] run the validation commands
+- ⚠️ not exercised in a running Eclipse: a prompt and its reply, permission cards, agent terminals in the Console view, opening files, the commands and their menu entries, the sign-in window, a real `kiro-cli`
 
 ### Task 10: Verify the MVP
 - [ ] streaming chat, tool cards, cancel, new session, permissions, fs read/write and terminal all pass in the UI test run against the fake agent
