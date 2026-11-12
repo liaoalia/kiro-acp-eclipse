@@ -111,7 +111,7 @@ Owns: `core/.../acp/impl/`, `core/.../acp/process/`. Reference: `src/acp/client.
 - [x] sessions: new, list, load (history flagged as replay), prompt, cancel (notification plus `cancelled` outcome for pending permissions), set mode, set config option, set model, authenticate, extension calls; session events in wire order
 - [x] one agent process shared by many sessions; restart
 - [x] tests against the fake agent, ported from `test/acp-client.test.ts` and `test/process.test.ts`
-- [ ] run the validation commands (only `mvn verify` for the core bundle and its tests was run in the task worktree: 95 tests pass; the webview and UI modules were not built there)
+- [x] run the validation commands (full build on `main` after the merge, three runs)
 
 ### Task 5: Transcript reducer
 Owns: `core/.../pure/transcript/`. Reference: `src/features/pure/transcript.ts`, `test/transcript.test.ts`.

@@ -14,10 +14,13 @@ import io.github.liaoalia.kiroacp.core.model.ConnectionStatus;
  * One {@code kiro-cli acp} process, which hosts any number of sessions.
  *
  * <p>Methods may be called from any thread and never block on the agent: they
- * return futures, which fail with {@link AcpException}. Listeners are called
- * on the connection's reader thread, in wire order, and must return quickly;
- * every update the agent wrote before the response of a request has been
- * delivered to the listeners before that request's future completes.
+ * return futures, which fail with {@link AcpException}. Listeners must return
+ * quickly. Whatever the agent sends reaches session listeners on the
+ * connection's reader thread, in wire order, and every update the agent wrote
+ * before the response of a request has been delivered before that request's
+ * future completes. {@code TurnStarted} is delivered on the thread that called
+ * {@link #prompt}, before the prompt is written. Connection changes come from
+ * whichever thread caused them, one at a time and in order.
  */
 public interface KiroAgent {
 

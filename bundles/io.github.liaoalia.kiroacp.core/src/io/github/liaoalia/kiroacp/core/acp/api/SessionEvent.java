@@ -8,7 +8,9 @@ public sealed interface SessionEvent {
 	/**
 	 * One {@code session/update}.
 	 *
-	 * @param update the ACP {@code SessionUpdate} object as sent, of any kind, known or not
+	 * @param update the ACP {@code SessionUpdate} object as sent, of a kind ACP defines. An update of
+	 *               any other kind arrives as {@link ExtensionNotification} with the method
+	 *               {@code session/update} and the whole notification as its params, as in the reference.
 	 * @param replay true for history replayed by {@code session/load} (while the load is in flight, or
 	 *			   when the agent marks it with {@code _meta.kiro.replay}). Replayed
 	 *			   {@code user_message_chunk}s must be rendered; live ones are echoed locally by the host.

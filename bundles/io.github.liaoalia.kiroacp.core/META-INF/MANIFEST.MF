@@ -8,6 +8,8 @@ Bundle-RequiredExecutionEnvironment: JavaSE-17
 Automatic-Module-Name: io.github.liaoalia.kiroacp.core
 Export-Package: io.github.liaoalia.kiroacp.core.acp,
  io.github.liaoalia.kiroacp.core.acp.api,
+ io.github.liaoalia.kiroacp.core.acp.impl,
+ io.github.liaoalia.kiroacp.core.acp.process,
  io.github.liaoalia.kiroacp.core.acp.rpc,
  io.github.liaoalia.kiroacp.core.host,
  io.github.liaoalia.kiroacp.core.model,
