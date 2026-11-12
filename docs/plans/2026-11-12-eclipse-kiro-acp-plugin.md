@@ -21,7 +21,7 @@
 - Page → Java works through a `BrowserFunction` (`ready` arrived), Java → page through `Browser.execute` (`state` rendered: markdown, fenced code with a copy button, session picker).
 - The page posts `ready` before SWT's load-completed event, so the host must treat the first message as "page is up".
 - A browser in a shell that is never opened still loads the page and runs its scripts, so UI tests drive the DOM without showing a window or sending input.
-- Not yet exercised: streaming `chunk` messages and tool cards in a test, clipboard, links, dark theme, `localStorage` persistence, Linux/macOS.
+- Not yet exercised: streaming `chunk` messages and tool cards in a test, Linux/macOS (clipboard, links, dark theme and `localStorage` persistence: see Task 7).
 
 ## Decisions
 - **Target**: Eclipse 2024-06 (4.32) and later, `JavaSE-17`. `SWT.EDGE` is passed explicitly because Edge became the default Windows browser only in 4.35.
@@ -132,14 +132,18 @@ Owns: `core/.../pure/permission/`, `core/.../pure/output/`, `core/.../pure/text/
 
 ### Task 7: Chat page hardening
 Owns: `ui/.../chat/WebChat.java`, `webview/host/`.
-- [ ] clipboard: check `navigator.clipboard` on a `file:` page in WebView2; if unavailable, route copy through a host message handled with SWT `Clipboard`
-- [ ] links: `ui.tests` clicking a web link through the DOM asserts the page did not navigate and the host was asked to open it
-- [ ] theme: re-apply on Eclipse theme change; map more variables from the JFace colour registry; verify the dark theme
-- [ ] persistence: confirm `localStorage` (keyed by a random per-instance id kept in the view memento and passed as the `view` URL parameter) survives restarts for a `file:` page; otherwise persist the shim's state through the host into the view memento
-- [ ] page failure: a visible message with a "Reload" action when WebView2 is missing or the page fails to load
-- [ ] focus: `Ctrl+C/V/A` and Eclipse key bindings do not fight inside the composer; `setFocus` lands in the input
-- [ ] `ui.tests` for clipboard, link veto and theme application
-- [ ] run the validation commands
+- [x] clipboard: `navigator.clipboard.writeText` exists on the `file:` page in WebView2 (secure context, permission `granted`), but the document of a browser in an unopened shell has no focus and Chromium refuses the call without it; the shim replaces `writeText` with a `host:copy` message handled with SWT `Clipboard` and answered to the page (DECISIONS D4)
+- [x] links: `ui.tests` clicking a web link through the DOM asserts the page did not navigate and the host was asked to open exactly that URL; other schemes are neither followed nor opened
+- [x] theme: re-applied when JFace's colour or font registry, the workbench theme or the system settings change; link, error, secondary text, input, selection and border colours mapped where they fit the view (`ChatTheme`, DECISIONS D5); light and dark verified in the page
+- [x] persistence: the shim's `localStorage` state (keyed by the per-instance id from the view memento, passed as the `view` URL parameter) survives a reload and a second browser widget with the same id, and is separate for another id
+- [x] page failure: a plain SWT message with a "Reload" link when the browser cannot be created, the page cannot be located or its file is missing
+- [x] focus: `setFocus` posts `focusInput`, also when asked before the page is up
+- [x] `ui.tests` for clipboard, link veto, theme application, persistence, page failure and focus
+- [x] run the validation commands for what this task touches: webview build and typecheck, the `ui` bundle and `ui.tests` (43 tests). In this worktree the full `mvn verify` stops at `core.tests`, whose `FakeAgentProtocolTest` needs `npm ci` in `tests/fixtures/fake-agent`, not installed here
+- ⚠️ the native `navigator.clipboard.writeText` was never called in a test: had it worked, it would have overwritten the clipboard of whoever sits at the machine. That it fails without focus is Chromium's documented rule, not an observation here.
+- ⚠️ the e4 theme-changed event (`org/eclipse/e4/ui/css/swt/theme/ThemeManager/themeChanged`) is not subscribed to: it needs `org.osgi.service.event` (and `IEventBroker` from e4), which the bundle does not import. A theme switch is noticed through the registries it changes; a theme that changed widget colours without touching either registry would be picked up only at the next reload.
+- ⚠️ whether `localStorage` survives a restart of Eclipse is not testable in one test process (the WebView2 user data folder must be the same and flushed); check by hand. The host-side fallback (state through the view memento) was therefore not built.
+- ⚠️ needs a person at the keyboard: `Ctrl+C/V/X/A/Z` inside the composer against Eclipse's key bindings, the caret really blinking in the input after the view is activated, the look of both themes in a running Eclipse, and the failure message on a machine without the WebView2 runtime.
 
 ### Wave 2 (serial after wave 1): MVP
 

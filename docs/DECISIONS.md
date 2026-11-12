@@ -34,3 +34,15 @@ The reader thread handles each message completely before reading the next: it ca
 ## D3. The chat page must be on a local drive (2026-11-12)
 
 See the plan, "Decisions". `file:` URLs name another machine in too many ways to tell the chat page from a foreign document reliably, and the bridge to the Java host must never serve a foreign document. From a network share the view shows a message instead of the chat.
+
+## D4. Copying goes through the host, not the browser's clipboard (2026-11-12)
+
+The page copies with `navigator.clipboard.writeText` and, when that fails, with `document.execCommand("copy")`. On the `file:` page in WebView2 the API is there (secure context, `clipboard-write` reported as granted), but Chromium only honours it while the document has focus, and for an embedded browser that depends on how focus reached the widget. The shim (`webview/host/bridge.js`) therefore replaces `writeText`: it posts `host:copy` with the text, `WebChat` puts it on the system clipboard with SWT and answers through `__kiroCopied(id, ok)`, so the page's button still says whether it worked. Only `writeText` is replaced; pasting and `Ctrl+C` on a selection stay the browser's own.
+
+Messages whose type starts with `host:` belong to the shim. `WebChat` handles the ones it knows (`host:openExternal`, `host:copy`) and drops the rest; none reaches the chat controller.
+
+## D5. Eclipse colours are used only where they fit the view (2026-11-12)
+
+`theme.css` has a complete light and a complete dark set of `--vscode-*` values, chosen by the luminance of the view's background. `ChatTheme` overrides a variable only when Eclipse has a colour with the same meaning: the view's background and foreground, the dialog and text fonts, JFace's hyperlink, error and qualifier colours, and the system's list, selection and border colours.
+
+Eclipse's dark theme restyles its own widgets and redefines JFace's colours, but the operating system's colours stay as they are. So a system colour is used only while the system's widget background is on the same side (light or dark) as the view, and a text colour only when its contrast against the view's background is at least 3:1. Everything else falls back to the stylesheet.

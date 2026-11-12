@@ -63,6 +63,36 @@
     return api;
   };
 
+  // Copying goes through the host. The page calls navigator.clipboard.writeText,
+  // which Chromium refuses unless the document has focus, and whether an
+  // embedded browser's document counts as focused is not ours to decide; the
+  // host's clipboard has no such condition. Only writeText is replaced: pasting
+  // stays the browser's own.
+  var copies = {};
+  var copySeq = 0;
+  function writeText(text) {
+    return new Promise(function (resolve, reject) {
+      var id = String(++copySeq);
+      copies[id] = { resolve: resolve, reject: reject };
+      api.postMessage({ type: "host:copy", id: id, text: String(text) });
+    });
+  }
+  try {
+    if (navigator.clipboard) navigator.clipboard.writeText = writeText;
+    else Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: writeText } });
+  } catch (e) {
+    // The page then falls back to what the browser offers by itself.
+  }
+
+  /** Host -> webview: the outcome of one "host:copy". */
+  window.__kiroCopied = function (id, ok) {
+    var copy = copies[id];
+    if (!copy) return;
+    delete copies[id];
+    if (ok) copy.resolve();
+    else copy.reject(new Error("The host could not copy"));
+  };
+
   // VS Code's webview host intercepts link clicks; here the shim does. The page
   // itself must never navigate (the host refuses it anyway), so web links are
   // handed to the host to open outside and every other target is dropped.
@@ -92,13 +122,20 @@
    * Host -> webview: theme. `kind` is "light" or "dark"; `vars` overrides
    * individual `--vscode-*` variables with colours and fonts taken from Eclipse.
    */
+  var themed = [];
   window.__kiroTheme = function (kind, vars) {
     var apply = function () {
       var body = document.body;
       body.classList.remove("vscode-light", "vscode-dark");
       body.classList.add(kind === "dark" ? "vscode-dark" : "vscode-light");
+      // A variable the host no longer sets goes back to the stylesheet's default.
+      for (var i = 0; i < themed.length; i++) body.style.removeProperty(themed[i]);
+      themed = [];
       for (var name in vars || {}) {
-        if (Object.prototype.hasOwnProperty.call(vars, name)) body.style.setProperty(name, vars[name]);
+        if (Object.prototype.hasOwnProperty.call(vars, name)) {
+          body.style.setProperty(name, vars[name]);
+          themed.push(name);
+        }
       }
     };
     if (document.body) apply();
