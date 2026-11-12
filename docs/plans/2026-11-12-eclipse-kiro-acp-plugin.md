@@ -115,9 +115,10 @@ Owns: `core/.../acp/impl/`, `core/.../acp/process/`. Reference: `src/acp/client.
 
 ### Task 5: Transcript reducer
 Owns: `core/.../pure/transcript/`. Reference: `src/features/pure/transcript.ts`, `test/transcript.test.ts`.
-- [ ] reducer from session updates to the transcript model (messages, thoughts, tool calls with diff and terminal content, plan, modes, config options, commands); unknown kinds are logged, not fatal
-- [ ] port every case of `test/transcript.test.ts`; replay each recording through the reducer without errors
+- [x] reducer from session updates to the transcript model (messages, thoughts, tool calls with diff and terminal content, plan, modes, config options, commands); unknown kinds are logged, not fatal (the reducer is pure: it returns the reason in `ApplyResult.ignored()` and the caller logs it)
+- [x] port every case of `test/transcript.test.ts`; replay each recording through the reducer without errors
 - [ ] run the validation commands
+- ⚠️ only `mvn -B -ntp -o verify -pl bundles/io.github.liaoalia.kiroacp.core,tests/io.github.liaoalia.kiroacp.core.tests` was run in the task's worktree (80 tests pass); the full `mvn verify` with the UI tests and the webview commands were not.
 
 ### Task 6: Pure logic needed by the MVP
 Owns: `core/.../pure/permission/`, `core/.../pure/output/`, `core/.../pure/text/`. Reference: `permissionPolicy.ts`, `outputBuffer.ts`, `textRange.ts`, `terminalPresentation.ts` and their tests.
