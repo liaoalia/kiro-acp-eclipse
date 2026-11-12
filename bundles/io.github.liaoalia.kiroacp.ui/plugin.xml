@@ -39,4 +39,14 @@
             id="io.github.liaoalia.kiroacp.preferences.keywords"
             label="kiro acp agent chat cli terminal diff protocol log"/>
    </extension>
+   <!-- A MessageConsole has no Close button of its own; closing one is how the user dismisses an agent terminal. -->
+   <extension point="org.eclipse.ui.console.consolePageParticipants">
+      <consolePageParticipant
+            id="io.github.liaoalia.kiroacp.terminalConsoleParticipant"
+            class="io.github.liaoalia.kiroacp.ui.services.TerminalConsoleParticipant">
+         <enablement>
+            <test property="org.eclipse.ui.console.consoleTypeTest" value="io.github.liaoalia.kiroacp.terminal"/>
+         </enablement>
+      </consolePageParticipant>
+   </extension>
 </plugin>
