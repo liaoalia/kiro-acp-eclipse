@@ -49,6 +49,14 @@
          </enablement>
       </consolePageParticipant>
    </extension>
+   <!-- The plan of a session, read-only; opened by the chat, never for a file. -->
+   <extension point="org.eclipse.ui.editors">
+      <editor
+            id="io.github.liaoalia.kiroacp.planEditor"
+            name="Kiro Plan"
+            icon="icons/kiro.png"
+            class="io.github.liaoalia.kiroacp.ui.plan.PlanEditor"/>
+   </extension>
    <extension point="org.eclipse.ui.commands">
       <category id="io.github.liaoalia.kiroacp.commands" name="Kiro"/>
       <command id="io.github.liaoalia.kiroacp.command.focusChat" name="Focus Kiro Chat" categoryId="io.github.liaoalia.kiroacp.commands"/>
@@ -59,6 +67,9 @@
       <command id="io.github.liaoalia.kiroacp.command.showLog" name="Show Kiro Protocol Log" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.forgetSessionOptions" name="Forget Remembered Kiro Session Options" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.sendSelection" name="Send Selection to Kiro Chat" description="Attach the selected lines of the active editor to the next message of the Kiro chat" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.openPlan" name="Open Kiro Plan" description="Show the plan of the Kiro chat session used last in a read-only editor" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.approvePlan" name="Approve Kiro Plan" description="Let Kiro leave planning and start on the plan it proposed" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.rejectPlan" name="Reject Kiro Plan" description="Keep Kiro in planning" categoryId="io.github.liaoalia.kiroacp.commands"/>
    </extension>
    <extension point="org.eclipse.ui.handlers">
       <handler commandId="io.github.liaoalia.kiroacp.command.focusChat" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
@@ -69,6 +80,9 @@
       <handler commandId="io.github.liaoalia.kiroacp.command.showLog" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.forgetSessionOptions" class="io.github.liaoalia.kiroacp.ui.sessions.ForgetSessionOptionsHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.sendSelection" class="io.github.liaoalia.kiroacp.ui.context.SendSelectionHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.openPlan" class="io.github.liaoalia.kiroacp.ui.plan.PlanCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.approvePlan" class="io.github.liaoalia.kiroacp.ui.plan.PlanCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.rejectPlan" class="io.github.liaoalia.kiroacp.ui.plan.PlanCommandHandler"/>
    </extension>
    <extension point="org.eclipse.ui.menus">
       <menuContribution locationURI="toolbar:io.github.liaoalia.kiroacp.chat">
@@ -80,6 +94,7 @@
          <command commandId="io.github.liaoalia.kiroacp.command.login" label="Log In to Kiro" style="push"/>
          <command commandId="io.github.liaoalia.kiroacp.command.showLog" label="Show Protocol Log" style="push"/>
          <command commandId="io.github.liaoalia.kiroacp.command.forgetSessionOptions" label="Forget Remembered Session Options" style="push"/>
+         <command commandId="io.github.liaoalia.kiroacp.command.openPlan" label="Open Plan" style="push"/>
       </menuContribution>
       <!-- The context menu of an editor whose selection is text. -->
       <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions">
