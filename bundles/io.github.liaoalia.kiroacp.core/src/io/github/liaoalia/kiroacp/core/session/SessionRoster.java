@@ -21,6 +21,9 @@ import io.github.liaoalia.kiroacp.core.session.ChatHooks.NewSessions;
  */
 final class SessionRoster {
 
+	/** What {@link #loadInto} answers for a session that was closed while it was restored. */
+	private static final String CLOSED_MEANWHILE = "";
+
 	private final ChatController c;
 	private int sessionSeq;
 
@@ -273,6 +276,134 @@ final class SessionRoster {
 			c.setPageSession(page, sessionId);
 		}
 		c.focus(sessionId);
+	}
+
+	/** See {@link ChatController#openPastSession}. */
+	CompletableFuture<String> doOpenPastSession(String sessionId, String agentTitle, PageBinding given) {
+		if (sessionId == null) {
+			return Async.done(null);
+		}
+		if (c.sessions.containsKey(sessionId)) {
+			doSelectSession(sessionId, given);
+			return Async.done(sessionId);
+		}
+		return c.lifecycle.ensureStarted().handle((started, error) -> null).thenCompose(started -> {
+			if (c.sessions.containsKey(sessionId)) {
+				// Restored by someone else while the agent started.
+				doSelectSession(sessionId, given);
+				return Async.done(sessionId);
+			}
+			PageBinding page = given != null ? given : c.focusedPage;
+			String previous = page != null ? page.displayed : null;
+			KiroAgent agent = c.agent;
+			if (agent == null || agent.status() != ConnectionStatus.READY) {
+				c.tell(previous != null ? c.sessions.get(previous) : null, Severity.WARNING,
+						"Cannot restore a session: the agent is not running.");
+				return Async.<String>done(null);
+			}
+			return loadInto(agent, sessionId, groupFor(page), page, agentTitle, previous).thenCompose(failure -> {
+				if (failure == null) {
+					ChatSession loaded = c.sessions.get(sessionId);
+					if (loaded == null || page == null) {
+						return Async.done(loaded != null ? sessionId : null);
+					}
+					// The page may have been closed while the history was replayed.
+					return dropIfOrphaned(loaded, page).thenApply(dropped -> dropped ? null : sessionId);
+				}
+				if (failure.isEmpty()) {
+					return Async.<String>done(null);
+				}
+				if (sessionId.equals(c.focusedId)) {
+					// The page went back to what it showed before, and so does the focus.
+					c.focusedId = null;
+					String fallback = previous != null && c.sessions.containsKey(previous) ? previous
+							: c.listing.sorted().stream().map(ChatSession::id).findFirst().orElse(null);
+					if (fallback != null) {
+						c.focus(fallback);
+					} else {
+						c.clearFocus();
+					}
+				}
+				c.tell(c.focusedId != null ? c.sessions.get(c.focusedId) : null, Severity.WARNING,
+						"Could not restore session " + sessionId + ": " + failure);
+				return Async.<String>done(null);
+			});
+		});
+	}
+
+	/**
+	 * {@code session/load} into a fresh session of {@code groupId}, displayed
+	 * by {@code page} and focused while the agent replays its history
+	 * ({@code loadInto} of the reference).
+	 *
+	 * @param fallback what the pages showing the session go back to when the load fails
+	 * @return {@code null} once the session is restored, else why it is not: it is then forgotten
+	 *         again, and the focus is the caller's to mend
+	 */
+	private CompletableFuture<String> loadInto(KiroAgent agent, String sessionId, String groupId, PageBinding page,
+			String agentTitle, String fallback) {
+		Path cwd = c.host.workspace().defaultCwd();
+		SessionState placeholder = new SessionState(sessionId, cwd.toString(), null, null, null, List.of(), null);
+		ChatSession session = new ChatSession(placeholder, ++sessionSeq, groupId, c.host.clock().getAsLong());
+		session.loading = true;
+		session.agentTitle = agentTitle;
+		c.sessions.put(sessionId, session);
+		// The id may be one that was closed earlier in this run: its commands are welcome again.
+		c.terminal.admitSession(sessionId);
+		c.logger.info("session " + sessionId + " restoring (group " + groupId + ")");
+		c.listing.schedule();
+		c.hooks.each(listener -> listener.sessionOpened(sessionId));
+		if (page != null && c.pages.contains(page)) {
+			c.setPageSession(page, sessionId);
+		}
+		c.focus(sessionId);
+		String restoring = c.tell(session, Severity.INFO, "Restoring session…").id();
+		return c.async.ui(agent.loadSession(sessionId, cwd, List.of())).handle((state, error) -> {
+			// Only this very object: the id may have been closed, or closed and restored again, meanwhile.
+			boolean current = c.sessions.get(sessionId) == session;
+			if (error != null) {
+				String message = Async.message(error);
+				c.logger.warn("session " + sessionId + " restore failed: " + message);
+				if (current) {
+					c.hooks.each(listener -> listener.sessionClosing(sessionId));
+					c.sessions.remove(sessionId);
+					c.permissions.cancelAll(sessionId);
+					c.permissions.clearPolicies(sessionId);
+					c.kinds.forget(sessionId);
+					try {
+						c.terminal.disposeSession(sessionId);
+					} catch (RuntimeException e) {
+						c.logger.warn("session " + sessionId + " restore: could not end its terminals: " + Async.message(e));
+					}
+					String back = fallback != null && c.sessions.containsKey(fallback) ? fallback : null;
+					for (PageBinding shown : List.copyOf(c.pages)) {
+						if (sessionId.equals(shown.displayed)) {
+							c.setPageSession(shown, back);
+						}
+					}
+				}
+				c.listing.schedule();
+				return message;
+			}
+			session.loading = false;
+			if (!current) {
+				// Closed on purpose while it was restored: nothing to show and nothing to explain.
+				return CLOSED_MEANWHILE;
+			}
+			// The agent already reported this state as an event; merging it again does no harm.
+			c.events.applySessionState(session, state);
+			// The replay touched it; a session that comes back is the most recent one.
+			c.touch(session);
+			c.clearNotice(sessionId, restoring);
+			for (PageBinding shown : List.copyOf(c.pages)) {
+				if (sessionId.equals(shown.displayed)) {
+					c.postSessionState(shown, sessionId);
+				}
+			}
+			c.listing.schedule();
+			c.logger.info("session " + sessionId + " restored (" + session.transcript.items().size() + " items)");
+			return null;
+		});
 	}
 
 	CompletableFuture<Void> closeNext(String groupId) {

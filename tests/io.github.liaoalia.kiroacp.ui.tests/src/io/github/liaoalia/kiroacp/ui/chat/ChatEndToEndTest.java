@@ -43,6 +43,7 @@ import io.github.liaoalia.kiroacp.core.acp.api.KiroAgent;
 import io.github.liaoalia.kiroacp.core.acp.impl.KiroAgents;
 import io.github.liaoalia.kiroacp.core.host.Logger;
 import io.github.liaoalia.kiroacp.core.session.ChatController;
+import io.github.liaoalia.kiroacp.core.session.history.PastSessions;
 import io.github.liaoalia.kiroacp.ui.services.Prompts;
 
 /**
@@ -342,6 +343,52 @@ class ChatEndToEndTest {
 		awaitPage("return document.querySelectorAll('.items .msg-user').length === 1"
 				+ " && document.querySelector('.items .msg-user').innerText.trim() === 'First question';", "the first session's transcript");
 		assertEquals("The answer is 42.", agentText());
+	}
+
+	// --- Past sessions ---
+
+	@Test
+	void theHistoryButtonRestoresAPastSessionOfTheAgentIntoThePage() {
+		start("chat");
+		String first = link.page().sessionId();
+		// The dialog's place: the user picks the first of what is offered.
+		List<List<String>> offered = new ArrayList<>();
+		PastSessions.install(controller, entries -> {
+			offered.add(entries.stream().map(entry -> entry.sessionId() + ": " + entry.label()).toList());
+			return CompletableFuture.completedFuture(entries.get(0).sessionId());
+		});
+
+		click(".header .hdr-history");
+
+		await(() -> "past-1".equals(link.page().sessionId()), "the page to display the restored session");
+		awaitPage("return document.querySelectorAll('.items .msg-user').length === 1"
+				+ " && document.querySelectorAll('.items .msg-agent').length === 2"
+				+ " && document.querySelectorAll('.items .tool').length === 1;", "the replayed conversation");
+		assertEquals(List.of(List.of("past-1: Investigate flaky CI", "past-2: Add retry to fetch")), offered);
+		// The history the agent replayed, user messages included, in the order it happened.
+		assertEquals("Why is CI flaky?", text(".items .msg-user"));
+		assertEquals("Let me look at .github/workflows/ci.yml.\nThe test job has no retry and the network step times out.", agentText());
+		assertEquals("Read .github/workflows/ci.yml", text(tool("call-past-1-read") + " .tool-title"));
+		assertEquals(Boolean.TRUE,
+				evaluate("return document.querySelector(" + js(tool("call-past-1-read")) + ").classList.contains('tool-completed');"));
+		assertEquals("msg-user,msg-agent,tool,msg-agent", evaluate("""
+				return Array.from(document.querySelectorAll('.items .msg-user, .items .msg-agent, .items .tool')).map(function (e) {
+					return ['msg-user', 'msg-agent', 'tool'].filter(function (c) { return e.classList.contains(c); })[0];
+				}).join(',');"""));
+		// It is the agent's title that names it, and the session shown before is still there.
+		await(() -> "Investigate flaky CI".equals(text(".header .brand-text")), "the restored session's title");
+		awaitPage("return document.querySelectorAll('.session-panel .sp-row').length === 2 && !!document.querySelector("
+				+ js(".session-panel .sp-row[data-session-id=" + js(first) + "]") + ");", "both sessions to be listed");
+		awaitPage("return document.body.innerText.indexOf('Restoring session') < 0;", "the progress notice to go");
+		awaitIdle();
+
+		// A restored session is an ordinary one.
+		type("And now?");
+		await(() -> agentText().endsWith("The answer is 42."), "the reply in the restored session");
+		awaitIdle();
+		assertEquals(2.0, evaluate("return document.querySelectorAll('.items .msg-user').length;"));
+		assertEquals("past-1", link.page().sessionId());
+		assertEquals(1, launches.size(), "one agent process");
 	}
 
 	// --- helpers ---

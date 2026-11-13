@@ -97,14 +97,15 @@ final class SessionEvents {
 		ApplyResult result = Transcript.applyUpdate(session.transcript, update);
 		session.transcript = result.state();
 		for (ToWebview emit : result.emits()) {
+			if (replay && emit instanceof ToWebview.ToolCall tool) {
+				// Marked before the card is posted: posting is where terminal content is resolved,
+				// and the terminal ids of replayed history are of an earlier run (reference D21).
+				session.replayedToolCalls.add(tool.call().toolCallId());
+			}
 			c.postTo(session.id(), emit instanceof ToWebview.Commands ? new ToWebview.Commands(c.commandsOf(session)) : emit);
-			if (emit instanceof ToWebview.ToolCall tool) {
+			if (!replay && emit instanceof ToWebview.ToolCall tool) {
 				// Replayed tool calls are history: nothing to open or reconcile for them.
-				if (replay) {
-					session.replayedToolCalls.add(tool.call().toolCallId());
-				} else {
-					c.hooks.each(listener -> listener.toolCallChanged(session.id(), tool.call()));
-				}
+				c.hooks.each(listener -> listener.toolCallChanged(session.id(), tool.call()));
 			}
 			if (emit instanceof ToWebview.Plan plan && session.id().equals(c.focusedId)) {
 				c.hooks.each(listener -> listener.planChanged(session.id(), plan.entries()));

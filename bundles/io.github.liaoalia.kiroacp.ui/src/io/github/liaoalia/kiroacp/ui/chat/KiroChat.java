@@ -10,6 +10,8 @@ import org.osgi.framework.FrameworkUtil;
 import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.ChatHost;
 import io.github.liaoalia.kiroacp.core.session.SignInFlow;
+import io.github.liaoalia.kiroacp.core.session.history.PastSessions;
+import io.github.liaoalia.kiroacp.core.session.history.RememberedOptions;
 import io.github.liaoalia.kiroacp.ui.services.ConsoleTerminalDisplay;
 import io.github.liaoalia.kiroacp.ui.services.DialogPrompts;
 import io.github.liaoalia.kiroacp.ui.services.DisplayScheduler;
@@ -19,6 +21,8 @@ import io.github.liaoalia.kiroacp.ui.services.EclipseTextFiles;
 import io.github.liaoalia.kiroacp.ui.services.EclipseWorkspace;
 import io.github.liaoalia.kiroacp.ui.services.PreferenceSettings;
 import io.github.liaoalia.kiroacp.ui.services.Prompts;
+import io.github.liaoalia.kiroacp.ui.sessions.DialogSessionPicker;
+import io.github.liaoalia.kiroacp.ui.sessions.PreferenceOptionMemory;
 
 /**
  * The one chat controller of the running workbench, with the Eclipse services
@@ -63,6 +67,8 @@ public final class KiroChat {
 		workspace = services.workspace();
 		controller = ChatController.create(services.host());
 		SignInFlow.install(controller);
+		PastSessions.install(controller, new DialogSessionPicker(display));
+		RememberedOptions.install(controller, new PreferenceOptionMemory(logger));
 	}
 
 	/** @return the shared instance, created on first use */
