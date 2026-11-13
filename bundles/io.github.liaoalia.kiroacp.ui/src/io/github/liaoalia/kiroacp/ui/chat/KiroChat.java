@@ -10,6 +10,8 @@ import org.osgi.framework.FrameworkUtil;
 import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.ChatHost;
 import io.github.liaoalia.kiroacp.core.session.SignInFlow;
+import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
+import io.github.liaoalia.kiroacp.ui.diff.CompareDiffEditors;
 import io.github.liaoalia.kiroacp.ui.services.ConsoleTerminalDisplay;
 import io.github.liaoalia.kiroacp.ui.services.DialogPrompts;
 import io.github.liaoalia.kiroacp.ui.services.DisplayScheduler;
@@ -63,6 +65,7 @@ public final class KiroChat {
 		workspace = services.workspace();
 		controller = ChatController.create(services.host());
 		SignInFlow.install(controller);
+		DiffReview.install(controller, services.host(), new CompareDiffEditors(logger));
 	}
 
 	/** @return the shared instance, created on first use */

@@ -43,6 +43,8 @@ import io.github.liaoalia.kiroacp.core.acp.api.KiroAgent;
 import io.github.liaoalia.kiroacp.core.acp.impl.KiroAgents;
 import io.github.liaoalia.kiroacp.core.host.Logger;
 import io.github.liaoalia.kiroacp.core.session.ChatController;
+import io.github.liaoalia.kiroacp.core.session.diff.DiffEditors;
+import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
 import io.github.liaoalia.kiroacp.ui.services.Prompts;
 
 /**
@@ -272,6 +274,68 @@ class ChatEndToEndTest {
 		awaitPage("return document.querySelectorAll('.items .perm').length === 0;", "the card to go");
 		// The fake agent reports a denied call as failed.
 		awaitPage("return document.querySelector(" + js(tool("call-edit")) + ").classList.contains('tool-failed');", "the edit's card to show it failed");
+	}
+
+	// --- a proposal reviewed in its editor ---
+
+	@Test
+	void theProposalOpensForItsCardAndAcceptingItInTheEditorWritesWhatTheUserMadeOfIt() throws Exception {
+		Files.write(root.resolve("config.json"), "{}".getBytes(StandardCharsets.UTF_8));
+		start("permission-reject");
+		// The compare editor needs a workbench; this one is a record of what it was asked to show.
+		List<DiffEditors.Proposal> shown = new ArrayList<>();
+		List<DiffEditors.Review> reviews = new ArrayList<>();
+		List<String> closed = new ArrayList<>();
+		String edited = "{ \"debug\": false }\n";
+		DiffReview.install(controller, services.host(), new DiffEditors() {
+			@Override
+			public void open(Proposal proposal, Review review) {
+				shown.add(proposal);
+				reviews.add(review);
+			}
+
+			@Override
+			public String proposedText(String id) {
+				return closed.contains(id) || shown.isEmpty() ? null : edited;
+			}
+
+			@Override
+			public void setPending(String id, boolean pending) {
+			}
+
+			@Override
+			public void close(String id) {
+				closed.add(id);
+			}
+		});
+
+		type("Turn debugging on");
+
+		awaitPage("return document.querySelectorAll('.items .perm').length === 1;", "the permission card");
+		await(() -> shown.size() == 1, "the proposal to open for its request");
+		assertEquals("config.json (Kiro proposal)", shown.get(0).title());
+		assertEquals(root.resolve("config.json"), Path.of(shown.get(0).path()).toRealPath());
+		assertEquals("{}", shown.get(0).original());
+		assertEquals("{ \"debug\": true }\n", shown.get(0).proposed());
+		assertTrue(shown.get(0).pending(), "the request waits: the editor offers Accept and Reject");
+
+		// The card's link shows the same proposal again.
+		click(".items .perm .perm-diff button");
+		await(() -> shown.size() == 2, "the link to show the proposal");
+		assertEquals(shown.get(0).id(), shown.get(1).id());
+		assertEquals(edited, shown.get(1).proposed(), "with what the user typed meanwhile");
+
+		// Accept in the editor: this is the UI thread, as in the workbench.
+		reviews.get(1).accept();
+
+		await(() -> "Understood.".equals(agentText()), "the turn to go on");
+		awaitIdle();
+		assertEquals(List.of(shown.get(0).id()), closed, "the editor closes with the answer");
+		assertEquals("{ \"debug\": true }\n", served("writeTextFile").get(0).request().path("content").asText(), "what the agent wrote");
+		assertEquals(edited, read(root.resolve("config.json")), "what the file got");
+		awaitPage("return document.querySelectorAll('.items .perm').length === 0;", "the card to go");
+		awaitPage("return document.querySelector(" + js(tool("call-edit")) + ").classList.contains('tool-completed');",
+				"the edit's card to show it completed");
 	}
 
 	// --- Stop ---
