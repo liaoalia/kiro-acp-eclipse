@@ -19,6 +19,7 @@
         <configuration>
           <systemProperties>
             <kiroacp.ui.src>${project.basedir}/../../bundles/io.github.liaoalia.kiroacp.ui/src</kiroacp.ui.src>
+            <kiroacp.fixtures>${project.basedir}/../fixtures</kiroacp.fixtures>
           </systemProperties>
         </configuration>
       </plugin>

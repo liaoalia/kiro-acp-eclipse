@@ -165,14 +165,17 @@ Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../chat/KiroChat.ja
 - [x] commands: New Session, Cancel Current Turn, Restart Agent Process, Show Protocol Log, Focus Chat; preference page (Task 8)
 - [x] controller tests in `core.tests` with the fake agent and fake hosts: the message sequence for a chat turn, the tour, cancel, permission allow/reject and policies, restart after crash, sessions
 - [x] smoke check by hand: the dev product with the CLI path pointed at the fake agent connects and shows the session (window capture, 2026-11-12)
-- [ ] `ui.tests`: the view against the fake agent, a prompt typed through the DOM, the streamed reply and a tool card present in the DOM
+- [x] `ui.tests`: the view against the fake agent, a prompt typed through the DOM, the streamed reply and a tool card present in the DOM (`ChatEndToEndTest`, see Task 10)
+- [x] ➕ `ChatPageLink`: what joins a `WebChat` to the controller, taken out of `ChatView` so that the test runs the same code; `KiroChat.services` builds the Eclipse host for either
 - [x] run the validation commands
 - ⚠️ not exercised in a running Eclipse: a prompt and its reply, permission cards, agent terminals in the Console view, opening files, the commands and their menu entries, the sign-in window, a real `kiro-cli`
 
 ### Task 10: Verify the MVP
-- [ ] streaming chat, tool cards, cancel, new session, permissions, fs read/write and terminal all pass in the UI test run against the fake agent
-- [ ] `core` has no SWT/JFace/UI imports (build check)
-- [ ] run the validation commands
+- [x] streaming chat, tool cards, cancel, new session, permissions, fs read/write and terminal all pass in the UI test run against the fake agent: `ChatEndToEndTest`, the real page in one browser widget per test, `ChatPageLink`, a real controller on the Eclipse host (`KiroChat.services`) and the fake agent as a process; everything typed and clicked through the DOM and read from the DOM or the disk. Runs on CI too
+- [x] `core` has no SWT/JFace/UI imports (build check): `CoreIndependenceTest` in `core.tests` reads the core's sources and manifest; imports only from the JDK's base packages, Jackson and the core itself, and no Eclipse, OSGi, AWT or Swing name in code. Seen failing with a `java.awt` import put into the core for the purpose
+- [x] run the validation commands
+- ⚠️ the test runtime has no workbench: `ChatView` itself, the Console view, opening a file from a tool card and "Open diff" are not in the test; the agent's request to open a URL is refused by the test's `Prompts`, the dialog is never shown. That `fs/read_text_file` was served is asserted on the host's answer: the fake agent does not show what it read
+- ⚠️ a test must empty the display before each look at the page (`await` in `ChatEndToEndTest`): SWT runs `asyncExec` work only when no window-system message waits, and `Browser.evaluate` leaves some behind every time. Looking after every single event delayed the chat's own messages by up to 4 s (Stop arrived after the 2 s turn had ended, 8 of 15 runs). `WebChatTest` still waits the old way; nothing there depends on time, it is only slower than it need be. Whether a busy page can hold back the controller the same way in a running Eclipse was not measured
 
 ### Wave 3 (parallel): parity features
 Each task owns one package in `core` and one in `ui`, handles its own `FromWebview` messages in a separate handler class registered with the controller, and is merged one at a time.
