@@ -476,6 +476,46 @@ final class SessionRoster {
 		});
 	}
 
+	/** See {@link ChatController#replaceSession}. */
+	CompletableFuture<String> doReplaceSession(String sessionId, PageBinding given) {
+		ChatSession session = sessionId != null ? c.sessions.get(sessionId) : null;
+		if (session == null) {
+			return Async.done(null);
+		}
+		if (session.closing) {
+			return session.replacement != null ? session.replacement : Async.done(null);
+		}
+		PageBinding page = given != null && sessionId.equals(given.displayed) ? given
+				: c.focusedPage != null && sessionId.equals(c.focusedPage.displayed) ? c.focusedPage
+						: c.pages.stream().filter(shown -> sessionId.equals(shown.displayed)).findFirst().orElse(null);
+		// First of all, and before the cancel: the end of the cancelled turn must find nothing
+		// that could start another turn on the session the user is leaving (reference D22).
+		session.closing = true;
+		c.hooks.each(listener -> listener.sessionReplacing(sessionId));
+		CompletableFuture<String> replacement = new CompletableFuture<>();
+		session.replacement = replacement;
+		CompletableFuture<Void> cancelled = session.turnActive ? c.turns.cancel(sessionId) : Async.done(null);
+		cancelled.handle((done, error) -> null).thenCompose(stopped -> doNewSession(page)).thenCompose(created -> {
+			if (created != null && !created.equals(sessionId)) {
+				return doCloseSession(sessionId).thenApply(closed -> created);
+			}
+			// Nothing took its place. When its page went away meanwhile, closing the page did not
+			// close a session that was on its way out already: it must not linger in a group nothing shows.
+			return page != null ? dropIfOrphaned(session, page).thenApply(dropped -> (String) null) : Async.<String>done(null);
+		}).whenComplete((created, error) -> {
+			if (error != null) {
+				c.logger.warn("session " + sessionId + " could not be replaced: " + Async.message(error));
+			}
+			if (created == null) {
+				// The session stays, and is usable again.
+				session.closing = false;
+			}
+			session.replacement = null;
+			replacement.complete(created);
+		});
+		return replacement;
+	}
+
 	/** Each page that displayed the closed session falls back to the most recent session of its group, a new one when none is left. */
 	private CompletableFuture<Void> replaceIn(List<PageBinding> displaying, int index, boolean ready, String[] replacement) {
 		if (index >= displaying.size()) {

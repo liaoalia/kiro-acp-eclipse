@@ -13,6 +13,7 @@ import io.github.liaoalia.kiroacp.core.session.SignInFlow;
 import io.github.liaoalia.kiroacp.core.session.history.PastSessions;
 import io.github.liaoalia.kiroacp.core.session.history.RememberedOptions;
 import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
+import io.github.liaoalia.kiroacp.core.session.steering.Steering;
 import io.github.liaoalia.kiroacp.ui.diff.CompareDiffEditors;
 import io.github.liaoalia.kiroacp.ui.context.KiroContext;
 import io.github.liaoalia.kiroacp.ui.services.ConsoleTerminalDisplay;
@@ -74,6 +75,7 @@ public final class KiroChat {
 		RememberedOptions.install(controller, new PreferenceOptionMemory(logger));
 		DiffReview.install(controller, services.host(), new CompareDiffEditors(logger));
 		KiroContext.install(controller, services.host(), display);
+		Steering.install(controller);
 	}
 
 	/** @return the shared instance, created on first use */
