@@ -177,6 +177,8 @@ Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../chat/KiroChat.ja
 - ⚠️ the test runtime has no workbench: `ChatView` itself, the Console view, opening a file from a tool card and "Open diff" are not in the test; the agent's request to open a URL is refused by the test's `Prompts`, the dialog is never shown. That `fs/read_text_file` was served is asserted on the host's answer: the fake agent does not show what it read
 - ⚠️ a test must empty the display before each look at the page (`await` in `ChatEndToEndTest`): SWT runs `asyncExec` work only when no window-system message waits, and `Browser.evaluate` leaves some behind every time. Looking after every single event delayed the chat's own messages by up to 4 s (Stop arrived after the 2 s turn had ended, 8 of 15 runs). `WebChatTest` still waits the old way; nothing there depends on time, it is only slower than it need be. Whether a busy page can hold back the controller the same way in a running Eclipse was not measured
 
+- [x] ➕ review of Tasks 2-10 (revmux task `since-e740fa1`, 2026-11-13): round 02 found the agent's commands outliving their session or agent, a project selected in a view losing to the open editor, and a permission card that could overtake its tool call; round 03 found, in those fixes, a command still starting for a closed session and processes ended on the display thread; round 04 (`final`) came back clean. The codex agent did real work in round 03 only. Released as 0.1.2
+
 ### Wave 3 (parallel): parity features
 Each task owns one package in `core` and one in `ui`, handles its own `FromWebview` messages in a separate handler class registered with the controller, and is merged one at a time.
 
