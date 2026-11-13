@@ -94,6 +94,8 @@ public final class KiroPreferencePage extends FieldEditorPreferencePage implemen
 		addFlag(PreferenceSettings.REMEMBER_SESSION_OPTIONS, "&Remember session options", parent,
 				"Remembers the mode, model and options you choose and applies them to every new session (only"
 						+ " values the agent offers are applied).");
+		addFlag(PreferenceSettings.SESSION_PANEL_COLLAPSED, "Start with the session list colla&psed", parent,
+				"Starts the chat with the session list collapsed to icons.");
 	}
 
 	private void addFlag(String key, String label, Composite parent, String tooltip) {

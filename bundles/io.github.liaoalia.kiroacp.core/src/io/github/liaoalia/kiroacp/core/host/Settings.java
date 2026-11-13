@@ -23,7 +23,7 @@ public interface Settings {
 	/** Executable path or bare command name; {@code kiro-cli} by default. */
 	String cliPath();
 
-	/** Arguments after the command; when empty the agent is started with {@code acp}. */
+	/** Extra arguments appended after {@code acp} ({@code kiroAcp.cliArgs}); empty by default. */
 	List<String> cliArgs();
 
 	TerminalMode terminalMode();

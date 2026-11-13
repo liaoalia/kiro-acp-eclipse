@@ -6,8 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.io.ByteArrayInputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -16,6 +21,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
+import org.eclipse.core.filebuffers.FileBuffers;
+import org.eclipse.core.filebuffers.ITextFileBuffer;
+import org.eclipse.core.filebuffers.ITextFileBufferManager;
+import org.eclipse.core.filebuffers.LocationKind;
+import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IWorkspace;
@@ -28,7 +38,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 import io.github.liaoalia.kiroacp.core.acp.api.AgentProcessOptions;
+import io.github.liaoalia.kiroacp.core.acp.api.ClientServices;
+import io.github.liaoalia.kiroacp.core.model.ToolCallView;
+import io.github.liaoalia.kiroacp.core.model.ToolKind;
+import io.github.liaoalia.kiroacp.core.model.ToolStatus;
 import io.github.liaoalia.kiroacp.core.acp.impl.KiroAgents;
 import io.github.liaoalia.kiroacp.core.model.FromWebview;
 import io.github.liaoalia.kiroacp.core.model.ImageAttachment;
@@ -115,7 +131,7 @@ class KiroChatFeaturesTest {
 		services = KiroChat.services(display, new RefusingPrompts());
 		controller = ChatController.create(services.host(), (options, client) -> KiroAgents.create(new AgentProcessOptions("node",
 				List.of(script.toString(), "acp", "--scenario", "chat"), options.cwd(), options.env(), options.logger(),
-				options.clientVersion()), client));
+				options.clientVersion()), recordingReads(client)));
 		KiroChat.install(controller, services, display);
 		page = controller.attach(posted::add, AttachOptions.ownGroup("features-test"));
 		page.onMessage(new FromWebview.Ready());
@@ -195,7 +211,77 @@ class KiroChatFeaturesTest {
 		assertEquals(List.of("Could not open the plan: there is no workbench window to show the plan in"), notices(asked));
 	}
 
+	/**
+	 * Plan Task 17: with the features as the plug-in installs them, no type of
+	 * message the page may send is left without a handler. What
+	 * {@link ChatController#handles} says is tied to what the controller does
+	 * with a message by {@code PageProtocolCoverageTest} of the core tests,
+	 * which sends every sample; here nothing is sent, because the handlers of
+	 * the real installation open dialogs and terminal windows.
+	 */
+	@Test
+	void everyMessageThePageMaySendHasAHandlerInTheInstalledPlugIn() {
+		List<String> dropped = new ArrayList<>();
+		Class<?>[] types = FromWebview.class.getPermittedSubclasses();
+		for (Class<?> type : types) {
+			if (!controller.handles(type.asSubclass(FromWebview.class))) {
+				dropped.add(type.getSimpleName());
+			}
+		}
+		assertEquals(List.of(), dropped, "page messages that would be logged and dropped");
+		assertEquals(23, types.length, "the types of FromWebview");
+	}
+
+	/**
+	 * Reference F6.1, first half: the agent's {@code fs/read_text_file} gets
+	 * the unsaved text of a file that is open, and reading saves nothing. The
+	 * file is "open" as an editor holds it open, through the file buffers.
+	 */
+	@Test
+	void theAgentsReadToolSeesTheUnsavedEditsOfAnOpenFileAndLeavesThemUnsaved() throws Exception {
+		IFile readme = project.getFile("README.md");
+		readme.create(new ByteArrayInputStream("# Tour\n".getBytes(StandardCharsets.UTF_8)), true, null);
+		Path onDisk = Path.of(readme.getLocation().toOSString());
+		ITextFileBufferManager buffers = FileBuffers.getTextFileBufferManager();
+		buffers.connect(readme.getFullPath(), LocationKind.IFILE, null);
+		try {
+			ITextFileBuffer buffer = buffers.getTextFileBuffer(readme.getFullPath(), LocationKind.IFILE);
+			buffer.getDocument().set("unsaved line added by the test\n# Tour\n");
+			assertTrue(buffer.isDirty(), "the file has unsaved edits before the prompt");
+
+			int mark = posted.size();
+			page.onMessage(new FromWebview.Prompt("/scenario tour", List.of(), null));
+			await(() -> since(mark, ToWebview.Permission.class).size() == 1, "the permission card of the tour's edit");
+			ToWebview.Permission asked = since(mark, ToWebview.Permission.class).get(0);
+			page.onMessage(new FromWebview.PermissionResponse(asked.request().requestId(), "accept"));
+			await(() -> since(mark, ToWebview.Turn.class).stream().anyMatch(turn -> !turn.active()), "the tour to end");
+
+			assertEquals(1, reads.size(), reads.toString());
+			assertEquals(onDisk.toRealPath(), Path.of(reads.get(0).request().path("path").asText()).toRealPath());
+			assertEquals("unsaved line added by the test\n# Tour\n", reads.get(0).answer().get(10, TimeUnit.SECONDS).path("content").asText());
+			assertTrue(buffer.isDirty(), "the read did not save the file");
+			assertEquals("# Tour\n", Files.readString(onDisk), "nor change it on disk");
+
+			ToolCallView read = since(mark, ToWebview.ToolCall.class).stream().map(ToWebview.ToolCall::call)
+					.filter(call -> call.toolCallId().equals("call-read")).reduce((first, second) -> second).orElseThrow();
+			assertEquals(ToolKind.READ, read.kind());
+			assertEquals(ToolStatus.COMPLETED, read.status());
+			assertTrue(read.locations().stream().anyMatch(location -> location.path().endsWith("README.md")), read.toString());
+			// The fake agent says in the chat what it expected and did not get.
+			assertEquals(List.of(), agentTexts(mark).stream().filter(text -> text.contains("[fake-agent]")).toList());
+			assertEquals("end_turn", since(mark, ToWebview.Turn.class).stream().filter(turn -> !turn.active()).findFirst().orElseThrow()
+					.stopReason());
+		} finally {
+			buffers.disconnect(readme.getFullPath(), LocationKind.IFILE, null);
+		}
+	}
+
 	// --- what the page got ---
+
+	private <T extends ToWebview> List<T> since(int mark, Class<T> type) {
+		List<ToWebview> all = List.copyOf(posted);
+		return all.subList(Math.min(mark, all.size()), all.size()).stream().filter(type::isInstance).map(type::cast).toList();
+	}
 
 	private <T extends ToWebview> T last(Class<T> type) {
 		List<ToWebview> all = List.copyOf(posted);
@@ -219,6 +305,31 @@ class KiroChatFeaturesTest {
 	}
 
 	// --- plumbing ---
+
+	/** A {@code fs/read_text_file} of the agent and what the host answered. */
+	private record Read(JsonNode request, CompletableFuture<JsonNode> answer) {
+	}
+
+	private final List<Read> reads = new CopyOnWriteArrayList<>();
+
+	/** The host's services, with the agent's reads written down on their way through. */
+	private ClientServices recordingReads(ClientServices real) {
+		return (ClientServices) Proxy.newProxyInstance(ClientServices.class.getClassLoader(), new Class<?>[] { ClientServices.class },
+				(proxy, method, args) -> {
+					Object answer;
+					try {
+						answer = method.invoke(real, args);
+					} catch (InvocationTargetException e) {
+						throw e.getCause();
+					}
+					if (method.getName().equals("readTextFile") && answer instanceof CompletableFuture<?> future) {
+						@SuppressWarnings("unchecked")
+						CompletableFuture<JsonNode> content = (CompletableFuture<JsonNode>) future;
+						reads.add(new Read((JsonNode) args[0], content));
+					}
+					return answer;
+				});
+	}
 
 	/** {@code tests/fixtures/fake-agent/agent.mjs}; the test bundle's pom says where the fixtures are. */
 	private static Path fakeAgentScript() {

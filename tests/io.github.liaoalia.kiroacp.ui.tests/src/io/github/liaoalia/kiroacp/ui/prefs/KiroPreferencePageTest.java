@@ -75,7 +75,20 @@ class KiroPreferencePageTest {
 		assertEquals(List.of("kiro-cli", "", "1048576"), texts().stream().map(Text::getText).toList());
 		assertEquals(List.of("One console per session", "Only when a change waits for permission"),
 				combos().stream().map(Combo::getText).toList());
-		assertEquals(List.of(false, false, false, true), checks().stream().map(Button::getSelection).toList());
+		assertEquals(List.of(false, false, false, true, false), checks().stream().map(Button::getSelection).toList());
+	}
+
+	@Test
+	void everySettingHasAFieldOnThePage() {
+		open();
+
+		// The ten settings of PreferenceSettings: three texts, two choices, five flags. The stored key of
+		// each field is checked where the values are (storedValuesAreShown, okStoresWhatWasEntered...).
+		assertEquals(3, texts().size());
+		assertEquals(2, combos().size());
+		assertEquals(List.of("Attach the active editor's &file to each prompt", "&Log protocol messages",
+				"&Show the mode, model and option pickers by default", "&Remember session options",
+				"Start with the session list colla&psed"), checks().stream().map(Button::getText).toList());
 	}
 
 	@Test
@@ -99,13 +112,14 @@ class KiroPreferencePageTest {
 		stored.put(PreferenceSettings.AUTO_OPEN_DIFFS, "always");
 		stored.putBoolean(PreferenceSettings.LOG_PROTOCOL, true);
 		stored.putBoolean(PreferenceSettings.REMEMBER_SESSION_OPTIONS, false);
+		stored.putBoolean(PreferenceSettings.SESSION_PANEL_COLLAPSED, true);
 		open();
 
 		assertEquals(List.of("/opt/kiro/kiro-cli", "--agent \"my agent\"", "2048"),
 				texts().stream().map(Text::getText).toList());
 		assertEquals(List.of("Hidden (output only in the chat card)", "For every proposed file change"),
 				combos().stream().map(Combo::getText).toList());
-		assertEquals(List.of(false, true, false, false), checks().stream().map(Button::getSelection).toList());
+		assertEquals(List.of(false, true, false, false, true), checks().stream().map(Button::getSelection).toList());
 	}
 
 	@Test
@@ -133,6 +147,7 @@ class KiroPreferencePageTest {
 		assertTrue(settings.logProtocol());
 		assertTrue(settings.showSettingsByDefault());
 		assertFalse(settings.rememberSessionOptions());
+		assertTrue(settings.sessionPanelCollapsed());
 	}
 
 	@Test

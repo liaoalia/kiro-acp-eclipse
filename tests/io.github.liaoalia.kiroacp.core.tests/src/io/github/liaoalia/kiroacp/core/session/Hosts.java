@@ -269,6 +269,8 @@ final class Hosts {
 		volatile TerminalMode mode = TerminalMode.SHARED;
 		volatile boolean showSettings;
 		volatile AutoOpenDiffs autoOpenDiffs = AutoOpenDiffs.NEVER;
+		volatile List<String> cliArgs = List.of();
+		volatile boolean sessionPanelCollapsed;
 
 		@Override
 		public String cliPath() {
@@ -277,7 +279,7 @@ final class Hosts {
 
 		@Override
 		public List<String> cliArgs() {
-			return List.of();
+			return cliArgs;
 		}
 
 		@Override
@@ -312,7 +314,7 @@ final class Hosts {
 
 		@Override
 		public boolean sessionPanelCollapsed() {
-			return false;
+			return sessionPanelCollapsed;
 		}
 
 		@Override

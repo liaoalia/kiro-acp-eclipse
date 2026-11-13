@@ -27,10 +27,25 @@ final class PageMessages {
 			FromWebview.SetMode.class, FromWebview.SetConfigOption.class, FromWebview.SetModel.class, FromWebview.Cancel.class,
 			FromWebview.NewSession.class, FromWebview.SelectSession.class);
 
+	/**
+	 * The page messages of the core chat, acted on here. Every other type is
+	 * a feature's and goes to the handler registered for it in {@link ChatHooks}.
+	 */
+	static final Set<Class<? extends FromWebview>> OWN = Set.of(FromWebview.Ready.class, FromWebview.Prompt.class,
+			FromWebview.Cancel.class, FromWebview.NewSession.class, FromWebview.SelectSession.class, FromWebview.CloseSession.class,
+			FromWebview.Restart.class, FromWebview.PermissionResponse.class, FromWebview.PermissionAlways.class,
+			FromWebview.SetMode.class, FromWebview.SetConfigOption.class, FromWebview.SetModel.class, FromWebview.OpenFile.class,
+			FromWebview.ShowTerminal.class, FromWebview.ShowLog.class);
+
 	private final ChatController c;
 
 	PageMessages(ChatController controller) {
 		this.c = controller;
+	}
+
+	/** @return whether a message of that type would be acted on: here, or by the handler a feature registered */
+	boolean handles(Class<? extends FromWebview> type) {
+		return OWN.contains(type) || c.hooks.handles(type);
 	}
 
 	/** @return completes when the message has been dealt with; for a prompt, when its turn has ended */
@@ -57,6 +72,13 @@ final class PageMessages {
 	private CompletableFuture<Void> act(FromWebview message, PageBinding page) {
 		String sessionId = page.displayed;
 		ChatSession session = sessionId != null ? c.sessions.get(sessionId) : null;
+		if (!OWN.contains(message.getClass())) {
+			// Seam: every other message belongs to a feature that registers its handler in ChatHooks.
+			if (!c.hooks.dispatch(message, page)) {
+				c.logger.info("page message without a handler: " + UiJson.toJson(message).path("type").asText("?"));
+			}
+			return Async.done(null);
+		}
 		if (message instanceof FromWebview.Prompt m) {
 			return c.turns.prompt(m.text(), m.chips(), sessionId, page, m.images());
 		}
@@ -105,9 +127,10 @@ final class PageMessages {
 			}
 		} else if (message instanceof FromWebview.ShowLog) {
 			c.host.actions().showLog();
-		} else if (!c.hooks.dispatch(message, page)) {
-			// Seam: every other message belongs to a feature that registers its handler in ChatHooks.
-			c.logger.info("page message without a handler: " + UiJson.toJson(message).path("type").asText("?"));
+		} else {
+			// Listed in OWN and not acted on above: a type added to the one and forgotten in the other.
+			c.logger.error("page message the controller should handle and does not: "
+					+ UiJson.toJson(message).path("type").asText("?"));
 		}
 		return Async.done(null);
 	}
