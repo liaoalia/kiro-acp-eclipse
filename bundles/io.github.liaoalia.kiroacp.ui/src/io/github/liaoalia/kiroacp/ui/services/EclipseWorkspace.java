@@ -10,12 +10,16 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.IPath;
+import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IPartListener2;
+import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.IWindowListener;
 import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPage;
@@ -32,15 +36,26 @@ import io.github.liaoalia.kiroacp.core.host.Workspace;
  * another file system have none and are left out. Roots are read from the
  * resource tree on every call, so a project opened or closed later is seen.
  *
- * <p>Every method is callable from any thread. The active editor can only be
- * asked on the UI thread, so {@link #start()} follows it there with listeners
- * and the other threads read what was noted last.
+ * <p>The directory to start in follows what the user is working on: the
+ * project of the active editor or of the resource selected last in a view
+ * such as the Project Explorer, whichever was noted later. A workspace with
+ * a multi-module build has a project per module, each inside the folder of
+ * its parent; the directory is then the outermost of them, which is where
+ * the build and usually the repository start.
+ *
+ * <p>Every method is callable from any thread. The active editor and the
+ * selection can only be asked on the UI thread, so {@link #start()} follows
+ * them there with listeners and the other threads read what was noted last.
  */
 public final class EclipseWorkspace implements Workspace {
 
 	private final IWorkspace workspace;
 	/** Project of the editor on top in the window used last; null when it has none. */
 	private volatile IProject activeProject;
+	/** Project of the resource selected last in a view; stays when the selection moves to something else. */
+	private volatile IProject selectedProject;
+	/** Whether the selection was noted after the editor. */
+	private volatile boolean selectionIsNewer;
 
 	// UI thread only.
 	private IWorkbench workbench;
@@ -81,10 +96,12 @@ public final class EclipseWorkspace implements Workspace {
 		}
 	};
 
+	private final ISelectionListener selectionListener = (part, selection) -> selectionChanged(selection);
+
 	private final IWindowListener windowListener = new IWindowListener() {
 		@Override
 		public void windowOpened(IWorkbenchWindow window) {
-			window.getPartService().addPartListener(partListener);
+			follow(window);
 		}
 
 		@Override
@@ -94,7 +111,7 @@ public final class EclipseWorkspace implements Workspace {
 
 		@Override
 		public void windowClosed(IWorkbenchWindow window) {
-			window.getPartService().removePartListener(partListener);
+			unfollow(window);
 		}
 
 		@Override
@@ -127,11 +144,13 @@ public final class EclipseWorkspace implements Workspace {
 			workbench = running;
 			running.addWindowListener(windowListener);
 			for (IWorkbenchWindow window : running.getWorkbenchWindows()) {
-				window.getPartService().addPartListener(partListener);
+				follow(window);
 			}
 			IWorkbenchWindow window = running.getActiveWorkbenchWindow();
 			if (window != null) {
+				// The editor first: what is selected now is the later choice of the two.
 				pageChanged(window.getActivePage());
+				selectionChanged(window.getSelectionService().getSelection());
 			}
 		});
 	}
@@ -148,7 +167,7 @@ public final class EclipseWorkspace implements Workspace {
 			}
 			workbench.removeWindowListener(windowListener);
 			for (IWorkbenchWindow window : workbench.getWorkbenchWindows()) {
-				window.getPartService().removePartListener(partListener);
+				unfollow(window);
 			}
 			workbench = null;
 		});
@@ -165,13 +184,17 @@ public final class EclipseWorkspace implements Workspace {
 
 	@Override
 	public Path defaultCwd() {
-		Path active = location(activeProject);
-		if (active != null) {
-			return active;
-		}
 		List<Root> roots = openProjects();
+		IProject editor = activeProject;
+		IProject selected = selectedProject;
+		for (IProject project : selectionIsNewer ? new IProject[] { selected, editor } : new IProject[] { editor, selected }) {
+			Path location = location(project);
+			if (location != null) {
+				return outermost(location, roots);
+			}
+		}
 		if (!roots.isEmpty()) {
-			return roots.get(0).location;
+			return outermost(roots.get(0).location, roots);
 		}
 		return Path.of(System.getProperty("user.home")).toAbsolutePath().normalize();
 	}
@@ -217,6 +240,45 @@ public final class EclipseWorkspace implements Workspace {
 			}
 		}
 		activeProject = resource == null ? null : resource.getProject();
+		selectionIsNewer = false;
+	}
+
+	/**
+	 * Notes the project of the first selected element when it is a workspace
+	 * resource. Any other selection (text in an editor, nothing at all)
+	 * changes nothing: moving on to another view is not a change of project.
+	 */
+	void selectionChanged(ISelection selection) {
+		if (!(selection instanceof IStructuredSelection structured) || structured.isEmpty()) {
+			return;
+		}
+		IResource resource = Adapters.adapt(structured.getFirstElement(), IResource.class);
+		IProject project = resource == null ? null : resource.getProject();
+		if (project != null) {
+			selectedProject = project;
+			selectionIsNewer = true;
+		}
+	}
+
+	private void follow(IWorkbenchWindow window) {
+		window.getPartService().addPartListener(partListener);
+		window.getSelectionService().addSelectionListener(selectionListener);
+	}
+
+	private void unfollow(IWorkbenchWindow window) {
+		window.getPartService().removePartListener(partListener);
+		window.getSelectionService().removeSelectionListener(selectionListener);
+	}
+
+	/** The location of the outermost open project whose folder holds this one. */
+	private static Path outermost(Path location, List<Root> roots) {
+		Path outermost = location;
+		for (Root root : roots) {
+			if (location.startsWith(root.location) && root.location.getNameCount() < outermost.getNameCount()) {
+				outermost = root.location;
+			}
+		}
+		return outermost;
 	}
 
 	private void pageChanged(IWorkbenchPage page) {

@@ -18,6 +18,8 @@ import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.text.TextSelection;
+import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IPersistableElement;
 import org.eclipse.ui.PlatformUI;
@@ -211,6 +213,113 @@ class EclipseWorkspaceTest {
 	}
 
 	@Test
+	void theProjectSelectedInAViewIsTheDefaultDirectory() throws CoreException {
+		project("alpha");
+		IProject beta = project("beta");
+
+		workspace.selectionChanged(new StructuredSelection(beta.getFolder("src")));
+
+		assertEquals(location(beta), workspace.defaultCwd());
+	}
+
+	@Test
+	void ofTheEditorAndTheSelectionTheOneNotedLaterDecides() throws CoreException {
+		IProject alpha = project("alpha");
+		IProject beta = project("beta");
+
+		workspace.selectionChanged(new StructuredSelection(beta));
+		workspace.activeInputChanged(new Input(alpha.getFile("notes.txt")));
+		assertEquals(location(alpha), workspace.defaultCwd());
+
+		workspace.selectionChanged(new StructuredSelection(beta));
+		assertEquals(location(beta), workspace.defaultCwd());
+	}
+
+	@Test
+	void aSelectionThatIsNotAResourceChangesNothing() throws CoreException {
+		project("alpha");
+		IProject beta = project("beta");
+		workspace.selectionChanged(new StructuredSelection(beta));
+
+		workspace.selectionChanged(StructuredSelection.EMPTY);
+		workspace.selectionChanged(new StructuredSelection("not a resource"));
+		workspace.selectionChanged(new TextSelection(0, 3));
+		workspace.selectionChanged(null);
+
+		assertEquals(location(beta), workspace.defaultCwd());
+	}
+
+	@Test
+	void theSelectedProjectStaysWhenTheEditorIsClosed() throws CoreException {
+		IProject alpha = project("alpha");
+		IProject beta = project("beta");
+		project("gamma");
+		workspace.selectionChanged(new StructuredSelection(beta));
+		workspace.activeInputChanged(new Input(alpha.getFile("notes.txt")));
+
+		workspace.activeInputChanged(null);
+
+		assertEquals(location(beta), workspace.defaultCwd());
+	}
+
+	@Test
+	void aSelectedProjectThatIsClosedGivesWayToTheEditorsProject() throws CoreException {
+		project("alpha");
+		IProject beta = project("beta");
+		IProject gamma = project("gamma");
+		workspace.activeInputChanged(new Input(gamma.getFile("notes.txt")));
+		workspace.selectionChanged(new StructuredSelection(beta));
+
+		beta.close(null);
+
+		assertEquals(location(gamma), workspace.defaultCwd());
+	}
+
+	@Test
+	void forAModuleInsideAnotherProjectTheDirectoryIsTheOutermostProject(@TempDir Path temp)
+			throws CoreException, IOException {
+		Path elsewhere = temp.toRealPath();
+		// "a-module" sorts first, as a module's project often does next to its parent's.
+		IProject module = projectAt("a-module", elsewhere.resolve("parent/group/a-module"));
+		IProject group = projectAt("group", elsewhere.resolve("parent/group"));
+		IProject parent = projectAt("parent", elsewhere.resolve("parent"));
+		IProject other = project("other");
+		try {
+			assertEquals(elsewhere.resolve("parent"), workspace.defaultCwd(), "no editor, no selection");
+
+			workspace.activeInputChanged(new Input(module.getFile("src/A.java")));
+			assertEquals(elsewhere.resolve("parent"), workspace.defaultCwd(), "editor in the module");
+
+			workspace.selectionChanged(new StructuredSelection(group));
+			assertEquals(elsewhere.resolve("parent"), workspace.defaultCwd(), "selection in between");
+
+			parent.close(null);
+			assertEquals(elsewhere.resolve("parent/group"), workspace.defaultCwd(), "the outermost that is open");
+
+			workspace.selectionChanged(new StructuredSelection(other));
+			assertEquals(location(other), workspace.defaultCwd(), "a project of its own");
+		} finally {
+			module.delete(true, true, null);
+			group.delete(true, true, null);
+			parent.delete(true, true, null);
+		}
+	}
+
+	@Test
+	void aSiblingFolderWithALongerNameIsNotAnEnclosingProject(@TempDir Path temp) throws CoreException, IOException {
+		Path elsewhere = temp.toRealPath();
+		IProject app = projectAt("app", elsewhere.resolve("app"));
+		IProject appTools = projectAt("app-tools", elsewhere.resolve("app-tools"));
+		try {
+			workspace.selectionChanged(new StructuredSelection(appTools));
+			assertEquals(elsewhere.resolve("app-tools"), workspace.defaultCwd());
+		} finally {
+			app.delete(true, true, null);
+			appTools.delete(true, true, null);
+		}
+	}
+
+	@Test
 	void everythingAnswersOnAThreadThatIsNotTheUiThread() throws Exception {
 		IProject alpha = project("alpha");
 		Path file = location(alpha).resolve("src/app.ts");
@@ -234,6 +343,15 @@ class EclipseWorkspaceTest {
 	private IProject project(String name) throws CoreException {
 		IProject project = resources.getRoot().getProject(name);
 		project.create(null);
+		project.open(null);
+		return project;
+	}
+
+	private IProject projectAt(String name, Path folder) throws CoreException {
+		IProject project = resources.getRoot().getProject(name);
+		IProjectDescription description = resources.newProjectDescription(name);
+		description.setLocationURI(folder.toUri());
+		project.create(description, null);
 		project.open(null);
 		return project;
 	}

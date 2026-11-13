@@ -11,7 +11,8 @@ public interface Workspace {
 
 	/**
 	 * The working directory for the agent process and new sessions: the
-	 * project of the active editor, else the first root, else the user's home.
+	 * project the user is working in (for a project nested in others, the
+	 * outermost one), else the first root, else the user's home.
 	 */
 	Path defaultCwd();
 
