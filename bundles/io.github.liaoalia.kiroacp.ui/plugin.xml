@@ -56,6 +56,7 @@
       <command id="io.github.liaoalia.kiroacp.command.cancelTurn" name="Cancel Kiro Turn" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.restartAgent" name="Restart Kiro Agent Process" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.showLog" name="Show Kiro Protocol Log" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.sendSelection" name="Send Selection to Kiro Chat" description="Attach the selected lines of the active editor to the next message of the Kiro chat" categoryId="io.github.liaoalia.kiroacp.commands"/>
    </extension>
    <extension point="org.eclipse.ui.handlers">
       <handler commandId="io.github.liaoalia.kiroacp.command.focusChat" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
@@ -63,6 +64,7 @@
       <handler commandId="io.github.liaoalia.kiroacp.command.cancelTurn" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.restartAgent" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.showLog" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.sendSelection" class="io.github.liaoalia.kiroacp.ui.context.SendSelectionHandler"/>
    </extension>
    <extension point="org.eclipse.ui.menus">
       <menuContribution locationURI="toolbar:io.github.liaoalia.kiroacp.chat">
@@ -73,5 +75,28 @@
          <command commandId="io.github.liaoalia.kiroacp.command.restartAgent" label="Restart Agent Process" style="push"/>
          <command commandId="io.github.liaoalia.kiroacp.command.showLog" label="Show Protocol Log" style="push"/>
       </menuContribution>
+      <!-- The context menu of an editor whose selection is text. -->
+      <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <command commandId="io.github.liaoalia.kiroacp.command.sendSelection" label="Send Selection to Kiro Chat" style="push">
+            <visibleWhen checkEnabled="false">
+               <and>
+                  <with variable="activePart">
+                     <instanceof value="org.eclipse.ui.IEditorPart"/>
+                  </with>
+                  <with variable="selection">
+                     <instanceof value="org.eclipse.jface.text.ITextSelection"/>
+                  </with>
+               </and>
+            </visibleWhen>
+         </command>
+      </menuContribution>
+   </extension>
+   <!-- Ctrl+Alt+K (Cmd+Alt+K on a Mac) while typing in a text editor, as in the reference. -->
+   <extension point="org.eclipse.ui.bindings">
+      <key
+            commandId="io.github.liaoalia.kiroacp.command.sendSelection"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+K"/>
    </extension>
 </plugin>
