@@ -153,7 +153,7 @@ Owns: `core/.../services/` (logic, no Eclipse), `ui/.../services/`, `ui/.../pref
 - [x] ui `host` implementations: `EclipseWorkspace`, `PreferenceSettings` with the "Kiro ACP Chat" preference page, `EclipseLogger` (a "Kiro ACP" console plus the Eclipse log), `DisplayScheduler`
 - [x] tests: fs against a temporary directory; terminal echo, exit code, kill, byte limit; permission registry; the fake agent's `tour` through the real services; workspace, settings, logger, scheduler and preference page in `ui.tests`
 - [x] run the validation commands (full build on `main` after the merge, two runs)
-- [ ] ➕ ui adapters, done with Task 9: `TextFiles` over open editors and `IFile`, `TerminalDisplay` over `MessageConsole`, `ExternalActions` (confirm and open a URL; sign-in in a terminal)
+- [x] ➕ ui adapters, done with Task 9: `TextFiles` over open editors and `IFile`, `TerminalDisplay` over `MessageConsole`, `ExternalActions` (confirm and open a URL; sign-in in a terminal)
 - ⚠️ unverified: nothing ran on Linux/macOS (signal mapping, POSIX tree kill); the "Kiro ACP" console and the active-editor tracking need a running workbench and were not exercised; the preference page was never seen in the real dialog
 
 ### Task 9: Chat controller and view wiring
@@ -237,7 +237,7 @@ Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui
 
 ## Technical Details
 - Page bridge: page → host is `window.__kiroHost(json)` (a `BrowserFunction`, handled with `asyncExec` so the browser is never re-entered from its own callback); host → page is `Browser.execute("window.__kiroReceive(<json>)")`, which dispatches a `message` event like VS Code does.
-- Threading: one reader thread per agent process parses NDJSON and dispatches in wire order to a single-threaded session executor; the controller reduces events there and posts messages to the UI thread, coalescing `chunk` bursts.
+- Threading: one reader thread per agent process parses NDJSON and dispatches in wire order to a single-threaded session executor; the controller reduces events there and posts one message per event to the UI thread (no coalescing of `chunk` bursts, see D6).
 - Fake agent in tests: `node tests/fixtures/fake-agent/agent.mjs acp --scenario <name>`; it imports `@agentclientprotocol/sdk`, so the fixtures folder has its own `package.json` and `npm ci` runs before the tests.
 
 ## Post-Completion

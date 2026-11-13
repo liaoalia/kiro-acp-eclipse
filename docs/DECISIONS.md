@@ -46,3 +46,13 @@ Messages whose type starts with `host:` belong to the shim. `WebChat` handles th
 `theme.css` has a complete light and a complete dark set of `--vscode-*` values, chosen by the luminance of the view's background. `ChatTheme` overrides a variable only when Eclipse has a colour with the same meaning: the view's background and foreground, the dialog and text fonts, JFace's hyperlink, error and qualifier colours, and the system's list, selection and border colours.
 
 Eclipse's dark theme restyles its own widgets and redefines JFace's colours, but the operating system's colours stay as they are. So a system colour is used only while the system's widget background is on the same side (light or dark) as the view, and a text colour only when its contrast against the view's background is at least 3:1. Everything else falls back to the stylesheet.
+
+## D6. The controller has its own thread; chunks are not coalesced (2026-11-12)
+
+The reader thread only hands events over: `ChatController` reduces them on a single controller thread, in wire order, and posts one webview message per event. Bursts of `chunk` are passed on as they come. The page already batches its own rendering, and merging chunks in the host would need a timer and a flush before every other message to keep the order; nothing measured so far asks for it.
+
+## D7. Permission cards are synced from the queue, never in place (2026-11-12)
+
+A permission request is answered on the reader thread, right after the `tool_call` it belongs to, while that `tool_call` is still waiting in the controller's queue. `PermissionManager.onDidChange` therefore queues the card sync onto the controller thread instead of running it where the change happened: a card can then never reach the page before its tool call.
+
+For the same reason the kind of every announced tool call is also kept in `ToolKindIndex`, written and read on the reader thread. Kiro leaves the kind out of a permission request, and the transcripts, which live on the controller thread, have not seen the `tool_call` yet when the policy is looked up.
