@@ -68,6 +68,15 @@ final class AgentLifecycle {
 	}
 
 	CompletableFuture<Void> ensureStarted() {
+		return ensureStarted(true);
+	}
+
+	/**
+	 * @param openSessions whether the new process opens a first session and gives the pages one;
+	 *                     not after a sign-in, which hands them their own sessions back
+	 *                     ({@link SessionRestore}). A start already under way is joined as it is
+	 */
+	private CompletableFuture<Void> ensureStarted(boolean openSessions) {
 		if (c.closed) {
 			return Async.done(null);
 		}
@@ -81,7 +90,7 @@ final class AgentLifecycle {
 		starting = run;
 		CompletableFuture<Void> started;
 		try {
-			started = startAgent();
+			started = startAgent(openSessions);
 		} catch (RuntimeException e) {
 			started = CompletableFuture.failedFuture(e);
 		}
@@ -97,7 +106,7 @@ final class AgentLifecycle {
 		return run;
 	}
 
-	private CompletableFuture<Void> startAgent() {
+	private CompletableFuture<Void> startAgent(boolean openSessions) {
 		Settings settings = c.host.settings();
 		String command = settings.cliPath();
 		List<String> configured = settings.cliArgs();
@@ -131,11 +140,12 @@ final class AgentLifecycle {
 			}));
 			setConnection(new ConnectionView(ConnectionStatus.STARTING, null, null, "Starting " + baseName(command) + "\u2026",
 					null, null, null));
-			return c.async.ui(next.start()).handle((info, error) -> started(next, info, error)).thenCompose(flow -> flow);
+			return c.async.ui(next.start()).handle((info, error) -> started(next, info, error, openSessions))
+					.thenCompose(flow -> flow);
 		});
 	}
 
-	private CompletableFuture<Void> started(KiroAgent next, AgentInfo info, Throwable error) {
+	private CompletableFuture<Void> started(KiroAgent next, AgentInfo info, Throwable error, boolean openSessions) {
 		if (c.agent != next) {
 			// Replaced or shut down while it was starting: whoever did that reports for the new one.
 			return Async.done(null);
@@ -149,6 +159,11 @@ final class AgentLifecycle {
 		}
 		c.agentInfo = info;
 		setConnection(connectionFromAgent(ConnectionStatus.READY, null));
+		return openSessions ? openFirstSessions() : Async.done(null);
+	}
+
+	/** A first session when none exists, and a session for every page still without one. */
+	CompletableFuture<Void> openFirstSessions() {
 		CompletableFuture<Void> first = Async.done(null);
 		if (c.sessions.isEmpty()) {
 			first = c.roster.createSession(c.roster.groupFor(null)).thenAccept(session -> {
@@ -179,14 +194,23 @@ final class AgentLifecycle {
 		});
 	}
 
-	CompletableFuture<Void> doRestart() {
+	/**
+	 * Spawn a fresh agent process. With {@code restoreSessions} (a sign-in)
+	 * every session with a conversation is loaded back once the new process
+	 * is ready, so signing in loses neither the conversation a page shows nor
+	 * the others in its list (reference D25).
+	 */
+	CompletableFuture<Void> doRestart(boolean restoreSessions) {
+		List<SessionRestore.Entry> plan = restoreSessions ? c.restore.plan() : List.of();
 		c.roster.endAllSessions();
 		return teardownAgent().thenCompose(gone -> {
 			setConnection(ConnectionView.of(ConnectionStatus.STOPPED));
 			// A start that was under way belongs to the agent just torn down: let it settle, then start anew.
 			CompletableFuture<Void> stale = starting != null ? starting : Async.done(null);
-			return stale.thenCompose(settled -> ensureStarted());
-		});
+			// With sessions to bring back the new process opens none of its own first: it
+			// would linger as an empty "New session" in the focused page.
+			return stale.thenCompose(settled -> ensureStarted(plan.isEmpty()));
+		}).thenCompose(started -> plan.isEmpty() ? Async.done(null) : c.restore.run(plan));
 	}
 
 	ConnectionView connectionFromAgent(ConnectionStatus status, String message) {

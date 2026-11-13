@@ -9,7 +9,7 @@ import org.osgi.framework.FrameworkUtil;
 
 import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.ChatHost;
-import io.github.liaoalia.kiroacp.core.session.SignInFlow;
+import io.github.liaoalia.kiroacp.core.session.auth.SignIn;
 import io.github.liaoalia.kiroacp.core.session.history.PastSessions;
 import io.github.liaoalia.kiroacp.core.session.history.RememberedOptions;
 import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
@@ -69,7 +69,7 @@ public final class KiroChat {
 		logger = services.logger();
 		workspace = services.workspace();
 		controller = ChatController.create(services.host());
-		SignInFlow.install(controller);
+		SignIn.install(controller);
 		PastSessions.install(controller, new DialogSessionPicker(display));
 		RememberedOptions.install(controller, new PreferenceOptionMemory(logger));
 		DiffReview.install(controller, services.host(), new CompareDiffEditors(logger));

@@ -67,6 +67,7 @@ public final class ChatController implements AutoCloseable {
 	final Turns turns = new Turns(this);
 	final SessionEvents events = new SessionEvents(this);
 	final SessionRoster roster = new SessionRoster(this);
+	final SessionRestore restore = new SessionRestore(this);
 	final AgentLifecycle lifecycle;
 	private final PageMessages messages = new PageMessages(this);
 	final PermissionCards cards = new PermissionCards(this);
@@ -168,7 +169,18 @@ public final class ChatController implements AutoCloseable {
 
 	/** Spawn a fresh agent process. The sessions belong to the old one and end with it. */
 	public CompletableFuture<Void> restart() {
-		return async.call(lifecycle::doRestart);
+		return async.call(() -> lifecycle.doRestart(false));
+	}
+
+	/**
+	 * {@link #restart()} for a sign-in (reference D25): every live session with
+	 * a conversation is loaded back into the new process ({@code session/load})
+	 * and into its group, each page showing its own session again; a page whose
+	 * session cannot be loaded gets a fresh one and a warning that names the
+	 * lost session. Empty sessions are not brought back.
+	 */
+	public CompletableFuture<Void> restartKeepingSessions() {
+		return async.call(() -> lifecycle.doRestart(true));
 	}
 
 	/**
@@ -243,7 +255,10 @@ public final class ChatController implements AutoCloseable {
 
 	/** Close every session of a group: its page was closed (reference D20). */
 	public CompletableFuture<Void> closeGroup(String groupId) {
-		return async.call(() -> roster.closeNext(groupId));
+		return async.call(() -> {
+			restore.groupClosed(groupId);
+			return roster.closeNext(groupId);
+		});
 	}
 
 	/**

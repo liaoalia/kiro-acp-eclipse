@@ -214,6 +214,50 @@ class SignInTerminalTest {
 		}
 	}
 
+	/**
+	 * The variables are those of the agent's sign-in method and nobody knows
+	 * what an agent puts there: the file that holds them is gone as soon as the
+	 * shell has it open.
+	 */
+	@Test
+	void aShellScriptThatSetsVariablesRemovesItsOwnFileFirst() {
+		Path self = Path.of("/tmp/kiro-signin1/it's signin.sh");
+		Path status = Path.of("/tmp/kiro-signin1/exit-code");
+
+		String script = SignInTerminal.posixScript(posix("kiro-cli", Map.of("KIRO_TOKEN", "s3cret"), "login"), status, true, self);
+
+		List<String> lines = List.of(script.split("\n"));
+		assertEquals("#!/bin/sh", lines.get(0));
+		assertEquals("rm -f '" + self.toString().replace("'", "'\\''") + "'", lines.get(1));
+		assertTrue(lines.indexOf("export KIRO_TOKEN='s3cret'") > 1, script);
+		assertEquals(1, lines.stream().filter(line -> line.startsWith("export ")).count(),
+				"the method's variables and nothing of this process's environment: " + script);
+
+		// Nothing to hide: the script stays, as before. A name that is no variable's sets nothing either.
+		assertFalse(SignInTerminal.posixScript(posix("kiro-cli", Map.of(), "login"), status, true, self).contains("rm -f"));
+		assertFalse(SignInTerminal.posixScript(posix("kiro-cli", Map.of("not a name", "x"), "login"), status, true, self)
+				.contains("rm -f"));
+	}
+
+	@Test
+	void theShellScriptThatRemovedItselfStillRunsToItsEnd(@TempDir Path temp) throws Exception {
+		Path shell = shell();
+		assumeTrue(shell != null, "no sh on this machine");
+		Path out = temp.resolve("out.txt");
+		Path status = temp.resolve(SignInTerminal.STATUS_FILE);
+		Path script = temp.resolve("signin.sh");
+		SignIn signIn = posix("sh", Map.of("KIRO_TOKEN", "s3cret", "KIRO_OUT", out.toString()), "-c",
+				"printf '%s' \"$KIRO_TOKEN\" > \"$KIRO_OUT\"; exit 4");
+		Files.writeString(script, SignInTerminal.posixScript(signIn, status, true, script), StandardCharsets.UTF_8);
+
+		int exit = run(List.of(shell.toString(), script.toString()), Map.of());
+
+		assertEquals(4, exit);
+		assertEquals(Integer.valueOf(4), SignInTerminal.readStatus(status), "the lines after the removal ran");
+		assertEquals("s3cret", Files.readString(out), "the command had its variables");
+		assertFalse(Files.exists(script), "the file with the variables is gone");
+	}
+
 	@Test
 	void onMacTheTerminalOpensTheScript() {
 		Path script = Path.of("/var/folders/x y/kiro-signin1/signin.command");
@@ -232,6 +276,16 @@ class SignInTerminalTest {
 				SignInTerminal.linuxCommand(SignInTerminal.linuxTerminal(Set.of("xterm", "konsole")::contains), script));
 		assertEquals(List.of("xfce4-terminal", "-x"), SignInTerminal.linuxTerminal(Set.of("xfce4-terminal")::contains));
 		assertEquals(List.of("xterm", "-e"), SignInTerminal.linuxTerminal(Set.of("xterm")::contains));
+		// The terminals of newer desktops and the ones people install themselves; some take the program as it is.
+		assertEquals(List.of("ptyxis", "--", script.toString()),
+				SignInTerminal.linuxCommand(SignInTerminal.linuxTerminal(Set.of("ptyxis", "xterm")::contains), script));
+		assertEquals(List.of("kitty", script.toString()),
+				SignInTerminal.linuxCommand(SignInTerminal.linuxTerminal(Set.of("kitty", "foot")::contains), script));
+		assertEquals(List.of("foot", script.toString()),
+				SignInTerminal.linuxCommand(SignInTerminal.linuxTerminal(Set.of("foot")::contains), script));
+		assertEquals(List.of("wezterm", "start", "--", script.toString()),
+				SignInTerminal.linuxCommand(SignInTerminal.linuxTerminal(Set.of("wezterm")::contains), script));
+		assertEquals(List.of("alacritty", "-e"), SignInTerminal.linuxTerminal(Set.of("alacritty", "xterm")::contains));
 		assertNull(SignInTerminal.linuxTerminal(program -> false));
 	}
 
@@ -254,12 +308,13 @@ class SignInTerminalTest {
 			SignInTerminal.Plan mac = SignInTerminal.prepare(Platform.MAC, signIn, Map.of(), program -> false);
 			plans.add(mac);
 			assertEquals("signin.command", mac.script().getFileName().toString());
-			assertEquals(SignInTerminal.posixScript(signIn, mac.status(), false), Files.readString(mac.script()));
+			assertEquals(SignInTerminal.posixScript(signIn, mac.status(), false, mac.script()), Files.readString(mac.script()));
+			assertTrue(Files.readString(mac.script()).contains("rm -f "), "it sets a variable, so it removes itself");
 			assertEquals(List.of("open", "-a", "Terminal", mac.script().toString()), mac.argv());
 
 			SignInTerminal.Plan linux = SignInTerminal.prepare(Platform.LINUX, signIn, Map.of(), "xterm"::equals);
 			plans.add(linux);
-			assertEquals(SignInTerminal.posixScript(signIn, linux.status(), true), Files.readString(linux.script()));
+			assertEquals(SignInTerminal.posixScript(signIn, linux.status(), true, linux.script()), Files.readString(linux.script()));
 			assertEquals(List.of("xterm", "-e", linux.script().toString()), linux.argv());
 
 			for (SignInTerminal.Plan plan : plans) {
@@ -279,9 +334,14 @@ class SignInTerminalTest {
 	@Test
 	void aLinuxDesktopWithoutATerminalProgramIsAnErrorAndLeavesNothingBehind() {
 		IOException failure = assertThrows(IOException.class,
-				() -> SignInTerminal.prepare(Platform.LINUX, posix("kiro-cli", Map.of(), "login"), Map.of(), program -> false));
+				() -> SignInTerminal.prepare(Platform.LINUX, posix("/opt/kiro cli/kiro-cli", Map.of("KIRO_TOKEN", "s3cret"), "login"),
+						Map.of(), program -> false));
 
 		assertTrue(failure.getMessage().contains("x-terminal-emulator"), failure.getMessage());
+		// The user reads this in the chat: it says what to do instead, and nothing of the variables.
+		assertTrue(failure.getMessage().endsWith("Run this in a terminal yourself, then restart the agent: \"/opt/kiro cli/kiro-cli\" login"),
+				failure.getMessage());
+		assertFalse(failure.getMessage().contains("s3cret"), failure.getMessage());
 	}
 
 	@Test
