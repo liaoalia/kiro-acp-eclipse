@@ -48,6 +48,8 @@ final class Harness implements AutoCloseable {
 	/** What the controller gets in place of each agent it asks for: a test puts itself between the two here. */
 	volatile UnaryOperator<KiroAgent> agentWrapper = UnaryOperator.identity();
 	final Path dir;
+	/** What the controller was created with: a feature installed on it takes its services from here. */
+	final ChatHost host;
 	final ChatController controller;
 	private final List<Client> clients = new ArrayList<>();
 
@@ -104,7 +106,7 @@ final class Harness implements AutoCloseable {
 	private Harness(Path dir, List<String> agentArgs) {
 		this.dir = dir;
 		String script = FakeAgent.fixtures().resolve("fake-agent").resolve("agent.mjs").toString();
-		ChatHost host = new ChatHost(settings, new Hosts.FakeWorkspace(dir), logger, scheduler, new DiskTextFiles(), null, external,
+		this.host = new ChatHost(settings, new Hosts.FakeWorkspace(dir), logger, scheduler, new DiskTextFiles(), null, external,
 				actions, "0.1.0-test", clock::get);
 		this.controller = ChatController.create(host, (options, services) -> {
 			launches.add(options);
