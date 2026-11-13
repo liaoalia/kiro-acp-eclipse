@@ -58,3 +58,24 @@ One webview message is posted per event. Bursts of `chunk` are passed on as they
 A permission request is answered on the reader thread, right after the `tool_call` it belongs to, while that `tool_call` is still waiting in the controller's queue. A change of the pending requests therefore never updates the cards where it happens: it queues a sync onto the controller thread, behind the tool call. The sync carries the ids of the requests that were pending when it was queued and shows no card for a request that only arrived later; that request has a sync of its own, queued behind its own tool call. What a card shows and whether it is still wanted is read when the sync runs.
 
 For the same reason the kind of every announced tool call is also kept in `ToolKindIndex`, written and read on the reader thread. Kiro leaves the kind out of a permission request, and the transcripts, which live on the controller thread, have not seen the `tool_call` yet when the policy is looked up.
+
+## D8. A proposed change is kept in memory and belongs to a session's tool call (2026-11-13)
+
+The reference shows a proposal through two URI schemes and keys it by tool call id. Here the proposed text lives in memory behind `DiffEditors`, keyed by session and tool call: tool call ids are only unique within a session. Unsaved edits belong to the compare editor; saving makes them the proposal, and Accept in the editor or Allow on the card takes what is in the editor first, so unsaved edits count, as in the reference.
+
+What the user made of a proposal is what gets written, by the reference's mechanism: accepting records the agent's text and the user's, and the write interceptor of `FsService` swaps them when the agent writes exactly its own text to that path.
+
+One deliberate difference: opening the same proposal again keeps the user's saved edits. The reference overwrites them with the agent's text; here that happens only when the agent's proposal itself changed.
+
+## D9. The `@` file search walks the disk (2026-11-13)
+
+Suggestions come from a walk of the file system under the outermost open projects (a nested project is searched once), not from the Eclipse resource tree: the agent creates files with its own commands, and the resource tree does not know them until a refresh. Left out are the reference's four folder names (`node_modules`, `.git`, `dist`, `out`) and every folder the resource tree marks derived, team-private or hidden, which covers `bin` and `target`. Links to folders are not followed. The walk runs on a worker thread and a newer query of the same page cancels the older one.
+
+The check of a prompt's images is a prompt interceptor and must be installed before the slash commands' interceptor, because the reference checks images first; `KiroChat` installs them in that order.
+
+## D10. Remembered session options are workspace preferences; past sessions are picked in a dialog (2026-11-13)
+
+Mode, model and config options chosen by the user are stored per workspace (`InstanceScope`) in a child node `memory` of the ui bundle's preferences, in the reference's JSON shape. A child node, so that writing it does not count as a settings change and "Restore Defaults" on the preference page leaves it alone. They are applied to new sessions only, never to a session that is loaded.
+
+Past sessions are chosen in a modal dialog with a filter box (every typed word must occur in the title, time or folder) instead of VS Code's quick pick.
+

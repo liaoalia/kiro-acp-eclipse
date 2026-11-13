@@ -69,6 +69,7 @@ public final class ChatController implements AutoCloseable {
 	final Turns turns = new Turns(this);
 	final SessionEvents events = new SessionEvents(this);
 	final SessionRoster roster = new SessionRoster(this);
+	final SessionRestore restore = new SessionRestore(this);
 	final AgentLifecycle lifecycle;
 	private final PageMessages messages = new PageMessages(this);
 	final PermissionCards cards = new PermissionCards(this);
@@ -170,7 +171,18 @@ public final class ChatController implements AutoCloseable {
 
 	/** Spawn a fresh agent process. The sessions belong to the old one and end with it. */
 	public CompletableFuture<Void> restart() {
-		return async.call(lifecycle::doRestart);
+		return async.call(() -> lifecycle.doRestart(false));
+	}
+
+	/**
+	 * {@link #restart()} for a sign-in (reference D25): every live session with
+	 * a conversation is loaded back into the new process ({@code session/load})
+	 * and into its group, each page showing its own session again; a page whose
+	 * session cannot be loaded gets a fresh one and a warning that names the
+	 * lost session. Empty sessions are not brought back.
+	 */
+	public CompletableFuture<Void> restartKeepingSessions() {
+		return async.call(() -> lifecycle.doRestart(true));
 	}
 
 	/**
@@ -229,6 +241,22 @@ public final class ChatController implements AutoCloseable {
 	}
 
 	/**
+	 * Replace a session by a new, empty one in the page that shows it (the
+	 * reference's {@code /clear}, D22): from this call on nothing starts a
+	 * turn on the session, its running turn is cancelled, a new session is
+	 * created and displayed, and then the old one is closed. A prompt sent to
+	 * the session meanwhile goes to the new one. When no session could be
+	 * created the old one stays, usable.
+	 *
+	 * @param page the page the request came from; when it does not display the session, the
+	 *             focused page or any other page that does gets the new one
+	 * @return the new session's id, or {@code null} when the session was not replaced
+	 */
+	public CompletableFuture<String> replaceSession(String sessionId, PageHandle page) {
+		return async.call(() -> roster.doReplaceSession(sessionId, binding(page)));
+	}
+
+	/**
 	 * Restore a session the agent kept from an earlier run ({@code session/load},
 	 * reference D21) into a fresh session of the page's group (default: the
 	 * focused page's, else {@value #DEFAULT_GROUP}), display and focus it. The
@@ -245,7 +273,10 @@ public final class ChatController implements AutoCloseable {
 
 	/** Close every session of a group: its page was closed (reference D20). */
 	public CompletableFuture<Void> closeGroup(String groupId) {
-		return async.call(() -> roster.closeNext(groupId));
+		return async.call(() -> {
+			restore.groupClosed(groupId);
+			return roster.closeNext(groupId);
+		});
 	}
 
 	/**
@@ -266,28 +297,6 @@ public final class ChatController implements AutoCloseable {
 	public CompletableFuture<Void> prompt(String text, List<ContextChip> chips, List<ImageAttachment> images, String sessionId,
 			PageHandle page) {
 		return async.call(() -> turns.prompt(text, chips, sessionId, binding(page), images));
-	}
-
-	/**
-	 * {@code /clear} (reference D18, D22): a new session takes the place of
-	 * {@code sessionId} in the page that displays it ({@code page} when it
-	 * does, else the focused page, else any), then the old one is closed as
-	 * {@link #closeSession} closes it. Its running turn is cancelled first, and
-	 * a prompt sent to it meanwhile goes to the new session.
-	 *
-	 * @return the new session's id, or {@code null} when none could be created: the old session then stays
-	 */
-	public CompletableFuture<String> replaceSession(String sessionId, PageHandle page) {
-		return async.call(() -> roster.doReplaceSession(sessionId, binding(page)));
-	}
-
-	/**
-	 * The page a command about a session acts in: {@code preferred} when it
-	 * displays the session, else the focused page when it does, else any page
-	 * that does, else {@code null}. Controller thread.
-	 */
-	public PageHandle pageDisplaying(String sessionId, PageHandle preferred) {
-		return roster.pageDisplaying(sessionId, binding(preferred));
 	}
 
 	/**
@@ -399,6 +408,12 @@ public final class ChatController implements AutoCloseable {
 		return session != null && session.turnActive;
 	}
 
+	/** Whether the session is live and staying: not closed, and neither being closed nor being replaced. */
+	public boolean sessionOpen(String sessionId) {
+		ChatSession session = sessionId != null ? sessions.get(sessionId) : null;
+		return session != null && !session.closing;
+	}
+
 	/** Changes whenever a turn of the session starts or ends: what a late answer compares to know it is late. */
 	public int turnGeneration(String sessionId) {
 		ChatSession session = sessions.get(sessionId);
@@ -469,6 +484,20 @@ public final class ChatController implements AutoCloseable {
 	public String echoUserMessage(String sessionId, String text, List<JsonNode> extras, DeliveryState delivery) {
 		ChatSession session = sessions.get(sessionId);
 		return session != null ? turns.echoUserMessage(session, text, extras != null ? extras : List.of(), delivery) : null;
+	}
+
+	/**
+	 * Show a prompt that was not echoed yet (one typed during a turn) as the
+	 * user's message, exactly as a prompt that starts a turn is shown: its
+	 * text, then what the {@link ChatHooks.PromptComposer} adds (images,
+	 * chips), whose chips are used up by it.
+	 *
+	 * @param delivery its badge, or {@code null}
+	 * @return the message's view id, or {@code null} when the session is not live
+	 */
+	public String echoPrompt(ChatHooks.PromptRequest request, DeliveryState delivery) {
+		ChatSession session = request.sessionId() != null ? sessions.get(request.sessionId()) : null;
+		return session != null ? turns.echoPrompt(session, request, hooks.composer(), delivery) : null;
 	}
 
 	/** Set or clear the delivery badge of a user message. */

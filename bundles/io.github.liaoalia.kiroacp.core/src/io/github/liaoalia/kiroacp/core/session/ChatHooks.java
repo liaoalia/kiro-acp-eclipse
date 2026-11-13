@@ -58,6 +58,14 @@ public final class ChatHooks {
 		default void sessionClosing(String sessionId) {
 		}
 
+		/**
+		 * The session is about to be replaced by a new one (reference D22, {@code /clear}):
+		 * from here on nothing may start a turn on it. {@link #sessionClosing} follows once
+		 * the new session exists; when none could be created the session stays and is usable again.
+		 */
+		default void sessionReplacing(String sessionId) {
+		}
+
 		/** The focused session changed; {@code null} when there is none. */
 		default void focusChanged(String sessionId) {
 		}
@@ -164,7 +172,11 @@ public final class ChatHooks {
 		}
 	}
 
-	/** Takes the prompts typed while a turn runs (reference D22: steer, else queue). */
+	/**
+	 * Takes the prompts typed while a turn runs (reference D22: steer, else
+	 * queue). Nothing was echoed yet: {@link ChatController#echoPrompt} shows
+	 * the message, with its badge.
+	 */
 	@FunctionalInterface
 	public interface MidTurnPrompts {
 

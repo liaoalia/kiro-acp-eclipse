@@ -301,7 +301,8 @@ final class SessionRoster {
 						"Cannot restore a session: the agent is not running.");
 				return Async.<String>done(null);
 			}
-			return loadInto(agent, sessionId, groupFor(page), page, agentTitle, previous).thenCompose(failure -> {
+			return loadInto(agent, sessionId, groupFor(page), page != null ? List.of(page) : List.of(), true, agentTitle, null,
+					previous).thenCompose(failure -> {
 				if (failure == null) {
 					ChatSession loaded = c.sessions.get(sessionId);
 					if (loaded == null || page == null) {
@@ -333,15 +334,17 @@ final class SessionRoster {
 
 	/**
 	 * {@code session/load} into a fresh session of {@code groupId}, displayed
-	 * by {@code page} and focused while the agent replays its history
-	 * ({@code loadInto} of the reference).
+	 * by {@code pages} (and focused with {@code focus}) while the agent replays
+	 * its history ({@code loadInto} of the reference).
 	 *
-	 * @param fallback what the pages showing the session go back to when the load fails
-	 * @return {@code null} once the session is restored, else why it is not: it is then forgotten
-	 *         again, and the focus is the caller's to mend
+	 * @param updatedAt when the session was last used, for one that comes back to its place in the
+	 *                  list; {@code null}: now
+	 * @param fallback  what the pages showing the session go back to when the load fails
+	 * @return {@code null} once the session is restored, else why it is not (empty when it was
+	 *         closed meanwhile): it is then forgotten again, and the focus is the caller's to mend
 	 */
-	private CompletableFuture<String> loadInto(KiroAgent agent, String sessionId, String groupId, PageBinding page,
-			String agentTitle, String fallback) {
+	CompletableFuture<String> loadInto(KiroAgent agent, String sessionId, String groupId, List<PageBinding> pages,
+			boolean focus, String agentTitle, Long updatedAt, String fallback) {
 		Path cwd = c.host.workspace().defaultCwd();
 		SessionState placeholder = new SessionState(sessionId, cwd.toString(), null, null, null, List.of(), null);
 		ChatSession session = new ChatSession(placeholder, ++sessionSeq, groupId, c.host.clock().getAsLong());
@@ -353,10 +356,14 @@ final class SessionRoster {
 		c.logger.info("session " + sessionId + " restoring (group " + groupId + ")");
 		c.listing.schedule();
 		c.hooks.each(listener -> listener.sessionOpened(sessionId));
-		if (page != null && c.pages.contains(page)) {
-			c.setPageSession(page, sessionId);
+		for (PageBinding page : pages) {
+			if (c.pages.contains(page)) {
+				c.setPageSession(page, sessionId);
+			}
 		}
-		c.focus(sessionId);
+		if (focus) {
+			c.focus(sessionId);
+		}
 		String restoring = c.tell(session, Severity.INFO, "Restoring session…").id();
 		return c.async.ui(agent.loadSession(sessionId, cwd, List.of())).handle((state, error) -> {
 			// Only this very object: the id may have been closed, or closed and restored again, meanwhile.
@@ -392,8 +399,13 @@ final class SessionRoster {
 			}
 			// The agent already reported this state as an event; merging it again does no harm.
 			c.events.applySessionState(session, state);
-			// The replay touched it; a session that comes back is the most recent one.
-			c.touch(session);
+			// The replay touched it. A session opened from the past is the most recent one; one
+			// that comes back after a sign-in keeps its place in the list.
+			if (updatedAt == null) {
+				c.touch(session);
+			} else {
+				session.updatedAt = updatedAt;
+			}
 			c.clearNotice(sessionId, restoring);
 			for (PageBinding shown : List.copyOf(c.pages)) {
 				if (sessionId.equals(shown.displayed)) {
@@ -413,57 +425,6 @@ final class SessionRoster {
 			}
 		}
 		return Async.done(null);
-	}
-
-	/** The page a command about {@code sessionId} acts in: {@code given}, else the focused page, else any, that displays it. */
-	PageBinding pageDisplaying(String sessionId, PageBinding given) {
-		if (sessionId == null) {
-			return null;
-		}
-		if (given != null && sessionId.equals(given.displayed)) {
-			return given;
-		}
-		if (c.focusedPage != null && sessionId.equals(c.focusedPage.displayed)) {
-			return c.focusedPage;
-		}
-		return c.pages.stream().filter(page -> sessionId.equals(page.displayed)).findFirst().orElse(null);
-	}
-
-	/**
-	 * {@code /clear} (reference D18, D22): a new session takes the place of
-	 * {@code sessionId} in the page that displays it, and the old one is
-	 * closed. From the first moment nothing may start another turn on the old
-	 * session; its running turn is cancelled first. A prompt sent to it
-	 * meanwhile waits for the replacement and goes there ({@link Turns}).
-	 *
-	 * @return the new session's id, or {@code null} when none could be created: the session then stays usable
-	 */
-	CompletableFuture<String> doReplaceSession(String sessionId, PageBinding given) {
-		ChatSession session = sessionId != null ? c.sessions.get(sessionId) : null;
-		if (session == null || session.closing) {
-			return Async.done(null);
-		}
-		PageBinding page = pageDisplaying(sessionId, given);
-		session.closing = true;
-		CompletableFuture<Void> cancelled = session.turnActive ? c.turns.cancel(sessionId) : Async.done(null);
-		CompletableFuture<String> replacement = cancelled.thenCompose(done -> doNewSession(page)).thenCompose(created -> {
-			if (created != null && !created.equals(sessionId)) {
-				return doCloseSession(sessionId).thenApply(closed -> created);
-			}
-			return Async.<String>done(null);
-		}).handle((created, error) -> {
-			session.replacement = null;
-			if (created == null) {
-				// The replacement failed: the session stays usable.
-				session.closing = false;
-			}
-			if (error != null) {
-				c.logger.warn("session " + sessionId + " could not be replaced: " + Async.message(error));
-			}
-			return created;
-		});
-		session.replacement = replacement.isDone() ? null : replacement;
-		return replacement;
 	}
 
 	CompletableFuture<Void> doCloseSession(String sessionId) {
@@ -525,6 +486,46 @@ final class SessionRoster {
 				});
 			}).thenRun(c.listing::schedule);
 		});
+	}
+
+	/** See {@link ChatController#replaceSession}. */
+	CompletableFuture<String> doReplaceSession(String sessionId, PageBinding given) {
+		ChatSession session = sessionId != null ? c.sessions.get(sessionId) : null;
+		if (session == null) {
+			return Async.done(null);
+		}
+		if (session.closing) {
+			return session.replacement != null ? session.replacement : Async.done(null);
+		}
+		PageBinding page = given != null && sessionId.equals(given.displayed) ? given
+				: c.focusedPage != null && sessionId.equals(c.focusedPage.displayed) ? c.focusedPage
+						: c.pages.stream().filter(shown -> sessionId.equals(shown.displayed)).findFirst().orElse(null);
+		// First of all, and before the cancel: the end of the cancelled turn must find nothing
+		// that could start another turn on the session the user is leaving (reference D22).
+		session.closing = true;
+		c.hooks.each(listener -> listener.sessionReplacing(sessionId));
+		CompletableFuture<String> replacement = new CompletableFuture<>();
+		session.replacement = replacement;
+		CompletableFuture<Void> cancelled = session.turnActive ? c.turns.cancel(sessionId) : Async.done(null);
+		cancelled.handle((done, error) -> null).thenCompose(stopped -> doNewSession(page)).thenCompose(created -> {
+			if (created != null && !created.equals(sessionId)) {
+				return doCloseSession(sessionId).thenApply(closed -> created);
+			}
+			// Nothing took its place. When its page went away meanwhile, closing the page did not
+			// close a session that was on its way out already: it must not linger in a group nothing shows.
+			return page != null ? dropIfOrphaned(session, page).thenApply(dropped -> (String) null) : Async.<String>done(null);
+		}).whenComplete((created, error) -> {
+			if (error != null) {
+				c.logger.warn("session " + sessionId + " could not be replaced: " + Async.message(error));
+			}
+			if (created == null) {
+				// The session stays, and is usable again.
+				session.closing = false;
+			}
+			session.replacement = null;
+			replacement.complete(created);
+		});
+		return replacement;
 	}
 
 	/** Each page that displayed the closed session falls back to the most recent session of its group, a new one when none is left. */

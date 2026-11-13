@@ -25,7 +25,10 @@ import io.github.liaoalia.kiroacp.core.model.ToWebview;
 import io.github.liaoalia.kiroacp.core.services.DiskTextFiles;
 import io.github.liaoalia.kiroacp.core.session.ChatHooks.Option;
 import io.github.liaoalia.kiroacp.core.session.Harness.Client;
+import io.github.liaoalia.kiroacp.core.model.DeliveryState;
+import io.github.liaoalia.kiroacp.core.session.auth.SignIn;
 import io.github.liaoalia.kiroacp.core.session.commands.SlashCommands;
+import io.github.liaoalia.kiroacp.core.session.steering.Steering;
 import io.github.liaoalia.kiroacp.core.session.context.ChatContext;
 import io.github.liaoalia.kiroacp.core.session.history.OptionMemory;
 import io.github.liaoalia.kiroacp.core.session.history.RememberedOptions;
@@ -162,7 +165,7 @@ class ChatSlashTest {
 	@Test
 	void clearReplacesTheSessionWithAFreshOneInTheSamePage() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 			String before = view.sessionId();
 			assertEquals("end_turn", view.turn("/scenario chat").stopReason());
@@ -189,7 +192,7 @@ class ChatSlashTest {
 	@Test
 	void usageCallsTheAdvertisedExtensionMethodAndShowsTheResultLocally() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 
 			String reply = local(h, view, "/usage");
@@ -209,7 +212,7 @@ class ChatSlashTest {
 	@Test
 	void modelSetsTheConfigOptionAndHelpListsTheBuiltIns() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			List<String> chosen = choices(h);
 			Client view = open(h);
 			assertEquals("model", view.snapshot().at("/configOptions/0/category").asText(), "the fake agent advertises a model option");
@@ -242,7 +245,7 @@ class ChatSlashTest {
 	@Test
 	void thePopupOfAFreshSessionListsTheBuiltInsAsSoonAsTheAgentAnnouncedItsCommands() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 			ToWebview.Commands last = view.page.last(ToWebview.Commands.class);
 			assertEquals(List.of("plan", "compact", "clear", "new"), last.commands().stream().limit(4).map(c -> c.name()).toList(),
@@ -258,7 +261,7 @@ class ChatSlashTest {
 	@Test
 	void modeAndEffortSetWhatTheyNameAndListTheValuesWhenTheArgumentIsMissingOrWrong() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			List<String> chosen = choices(h);
 			Client view = open(h);
 
@@ -294,7 +297,7 @@ class ChatSlashTest {
 					stored[0] = text;
 				}
 			}, h.logger);
-			SlashCommands.install(h.controller, options::describe);
+			SlashCommands.install(h.controller, options::describe, null);
 			Client view = open(h);
 
 			String nothing = local(h, view, "/capabilities");
@@ -337,7 +340,7 @@ class ChatSlashTest {
 	@Test
 	void planSwitchesToThePlannerModeWithoutThatBeingRememberedAndSendsItsText() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			List<String> chosen = choices(h);
 			Client view = open(h);
 			assertEquals("vibe", mode(view));
@@ -362,7 +365,7 @@ class ChatSlashTest {
 	void commandsTheAgentAdvertisesItselfAndUnknownOnesGoOutAsPrompts() throws Exception {
 		// The agent plays `chat` for a prompt that names no scenario.
 		try (Harness h = Harness.launch(dir, "--scenario", "chat")) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 
 			// No compact extension method, but a /compact of the agent's own.
@@ -381,7 +384,7 @@ class ChatSlashTest {
 	@Test
 	void aCommandThatRunsHereDoesNotSendTheImagesAndSaysSo() throws Exception {
 		try (Harness h = Harness.launch(dir); ChatContext context = context(h)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 
 			int mark = view.mark();
@@ -403,7 +406,7 @@ class ChatSlashTest {
 	@Test
 	void planWithTextSwitchesToThePlannerModeAndSendsTheImagesWithTheText() throws Exception {
 		try (Harness h = Harness.launch(dir); ChatContext context = context(h)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 
 			int mark = view.mark();
@@ -421,7 +424,7 @@ class ChatSlashTest {
 	void theImagesAreCheckedBeforeTheCommandIsLookedAt() throws Exception {
 		try (Harness h = Harness.launch(dir); ChatContext context = context(h)) {
 			// The order the composition root installs them in: the image check first.
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 			String junk = Base64.getEncoder().encodeToString("not an image at all".getBytes());
 
@@ -450,7 +453,7 @@ class ChatSlashTest {
 	@Test
 	void clearDuringATurnCancelsItAndAMessageTypedMeanwhileGoesToTheNewSession() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			List<String> closing = new CopyOnWriteArrayList<>();
 			h.controller.hooks().addListener(new ChatHooks.SessionListener() {
 				@Override
@@ -487,7 +490,7 @@ class ChatSlashTest {
 	@Test
 	void newOpensASessionBesideTheOneItWasTypedInAndLeavesItsTurnAlone() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			List<String> ended = ended(h);
 			Client view = open(h);
 			String first = view.sessionId();
@@ -514,7 +517,7 @@ class ChatSlashTest {
 	@Test
 	void commandsRunAtOnceWhileATurnRunsAndCancelStopsIt() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			Client view = open(h);
 			int mark = view.mark();
 			view.prompt("/scenario slow");
@@ -543,7 +546,7 @@ class ChatSlashTest {
 	@Test
 	void theTextOfPlanTypedDuringATurnGoesToWhateverTakesPromptsThen() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			List<String> taken = new CopyOnWriteArrayList<>();
 			h.controller.hooks().setMidTurnPrompts((request, blocks) -> {
 				taken.add(request.text() + " -> " + blocks.size() + " block(s)");
@@ -567,13 +570,108 @@ class ChatSlashTest {
 	}
 
 	// ---------------------------------------------------------------------
+	// With steering and queueing installed (reference e2e F12.4, F12.6, F12.7)
+	// ---------------------------------------------------------------------
+
+	@Test
+	void withSteeringInstalledCancelTypedDuringATurnRunsAtOnceAndIsNeitherSteeredNorQueued() throws Exception {
+		try (Harness h = Harness.launch(dir)) {
+			Steering.install(h.controller);
+			SlashCommands.install(h.controller, null, null);
+			Client view = open(h);
+			int mark = view.mark();
+			view.prompt("/scenario slow");
+			h.await(() -> view.agentChunks(mark).size() >= 2, "two streamed chunks of the slow turn");
+
+			view.prompt("/cancel");
+
+			assertEquals("cancelled", view.awaitTurnEnd(mark).stopReason(), "stop reason");
+			assertFalse(view.snapshot().get("turnActive").asBoolean(), "turnActive after /cancel");
+			assertEquals(List.of(), notices(view, mark), "no refusal, nothing about steering or a queue");
+			assertEquals(List.of("/scenario slow"), messages(view, "user").stream().map(ChatSlashTest::textOf).toList(),
+					"/cancel is not echoed as a prompt");
+			assertEquals(List.of(), view.page.ofType(ToWebview.MessageDelivery.class, mark), "it was neither steered nor queued");
+			assertTrue(view.agentChunks(mark).size() < 20, "the turn was cut short");
+			assertFalse(h.logger.has(Steering.STEER_METHOD), "the agent was not asked to steer: " + h.logger.lines);
+		}
+	}
+
+	@Test
+	void clearDuringATurnDiscardsTheQueueAndNeverStartsATurnOnTheClearedSession() throws Exception {
+		try (Harness h = Harness.launch(dir)) {
+			Steering steering = Steering.install(h.controller);
+			SlashCommands.install(h.controller, null, null);
+			List<String> ended = ended(h);
+			Client view = open(h);
+			String before = view.sessionId();
+			// As the reference's test hook: prompts during a turn queue without asking the agent.
+			h.ask(() -> {
+				steering.setSteerUnsupported(before, true);
+				return null;
+			});
+			int mark = view.mark();
+			view.prompt("/scenario slow");
+			h.await(() -> view.agentChunks(mark).size() >= 2, "two streamed chunks of the slow turn");
+			view.prompt("/scenario chat later");
+			ToWebview.MessageDelivery queued = view.page.await(ToWebview.MessageDelivery.class, mark,
+					badge -> badge.delivery() == DeliveryState.QUEUED, "the prompt to be queued");
+
+			view.prompt("/clear");
+			view.page.await(ToWebview.Session.class, mark, s -> s.sessionId() != null && !s.sessionId().equals(before),
+					"a fresh session after /clear");
+			h.await(() -> h.logger.has("session " + before + " closed"), "the cleared session to be closed");
+			h.scheduler.flush();
+
+			JsonNode state = view.snapshot();
+			assertNotEquals(before, state.get("sessionId").asText());
+			assertEquals(0, state.get("items").size(), "a fresh, empty session");
+			assertEquals(List.of(view.sessionId()), h.ask(h.controller::sessionIds), "the cleared session is gone");
+			assertEquals(List.of("1 queued message discarded."), notices(view, mark), "a notice says the queued message was discarded");
+			assertTrue(view.page.ofType(ToWebview.MessageDelivery.class, mark).stream()
+					.anyMatch(badge -> badge.messageId().equals(queued.messageId()) && badge.delivery() == null), "the queued badge was cleared");
+			// Only the slow turn ever started: the queued prompt never became a turn on the cleared session.
+			assertEquals(1, view.page.ofType(ToWebview.Turn.class, mark).stream().filter(ToWebview.Turn::active).count(),
+					"no turn started for the discarded prompt");
+			assertTrue(ended.stream().allMatch(end -> end.startsWith(before + " ")), "no turn of another session ended: " + ended);
+			assertFalse(view.agentChunks(mark).stream().anyMatch(chunk -> chunk.segment().toString().contains("42")),
+					"the discarded prompt was never answered");
+			assertFalse(state.get("turnActive").asBoolean(), "the new session is idle");
+		}
+	}
+
+	@Test
+	void aPromptTypedWhileClearIsReplacingTheSessionGoesToTheNewSession() throws Exception {
+		try (Harness h = Harness.launch(dir)) {
+			Steering.install(h.controller);
+			SlashCommands.install(h.controller, null, null);
+			Client view = open(h);
+			String before = view.sessionId();
+			int mark = view.mark();
+
+			// Both are on their way before the replacement exists.
+			view.prompt("/clear");
+			view.prompt("/scenario chat");
+
+			assertEquals("end_turn", view.awaitTurnEnd(mark).stopReason());
+			JsonNode state = view.snapshot();
+			assertNotEquals(before, state.get("sessionId").asText(), "the view shows the replacement session");
+			assertEquals(List.of(view.sessionId()), h.ask(h.controller::sessionIds), "the cleared session is gone");
+			assertEquals(List.of("/scenario chat"), messages(view, "user").stream().map(ChatSlashTest::textOf).toList(),
+					"the new session holds just the typed question");
+			assertEquals("The answer is 42.", lastText(view, "agent"), "it was answered in the new session");
+			assertFalse(state.get("turnActive").asBoolean(), "idle afterwards");
+			assertEquals(List.of(), notices(view, mark));
+		}
+	}
+
+	// ---------------------------------------------------------------------
 	// Without a session
 	// ---------------------------------------------------------------------
 
 	@Test
 	void loginAndRestartRunWithoutASessionAndAnythingElseIsToldThereIsNone() throws Exception {
 		try (Harness h = Harness.launch(dir, "--auth-required")) {
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, SignIn.install(h.controller));
 			Client view = h.attach("view", AttachOptions.ownGroup("view"));
 			view.send(new FromWebview.Ready());
 			view.page.await(ToWebview.Connection.class, 0, c -> c.connection().status() == ConnectionStatus.AUTH_REQUIRED, "the sign-in state");

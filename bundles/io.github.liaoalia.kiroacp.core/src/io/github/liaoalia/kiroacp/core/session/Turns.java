@@ -76,21 +76,15 @@ final class Turns {
 		}
 		ChatSession target = session;
 		if (target.closing) {
-			// `/clear` is replacing this session: the message was typed for the replacement, so it
-			// waits for it and goes there. Nothing may be sent to a closing session (reference D22).
+			// The session is being replaced: the message was typed for the session that takes its
+			// place, so it waits for that one and goes there. Nothing is sent to a closing session
+			// (reference D22).
 			CompletableFuture<String> replacement = target.replacement;
 			if (replacement == null) {
-				c.tell(target, Severity.WARNING, "The session is closing; send the message again in a new one.");
-				return Async.done(null);
+				return refuseClosing(target);
 			}
-			return c.async.ui(replacement).thenCompose(replacedBy -> {
-				if (replacedBy == null) {
-					c.tell(c.sessions.get(target.id()) == target ? target : null, Severity.WARNING,
-							"The session is closing; send the message again in a new one.");
-					return Async.<Void>done(null);
-				}
-				return send(text, chips, replacedBy, page, images);
-			});
+			return c.async.ui(replacement).thenCompose(
+					id -> id == null ? refuseClosing(target) : prompt(text, chips, id, page, images));
 		}
 		c.focus(target.id());
 		if (target.loading) {
@@ -110,8 +104,19 @@ final class Turns {
 						composer, blocks == null ? List.of() : blocks)));
 	}
 
+	private CompletableFuture<Void> refuseClosing(ChatSession session) {
+		c.tell(session, Severity.WARNING, "The session is closing; send the message again in a new one.");
+		return Async.done(null);
+	}
+
 	private CompletableFuture<Void> dispatch(KiroAgent agent, ChatSession session, PromptRequest request,
 			PromptComposer composer, List<JsonNode> blocks) {
+		if (session.closing || c.sessions.get(session.id()) != session) {
+			// The session began to close, or went away, while the prompt was put together (its
+			// files were read): the prompt starts over, and ends up where one typed now would.
+			return send(request.text(), request.chips(), session.id(), request.page() instanceof PageBinding binding ? binding : null,
+					request.images());
+		}
 		if (session.turnActive) {
 			MidTurnPrompts midTurn = c.hooks.midTurn();
 			if (midTurn == null) {
@@ -128,9 +133,15 @@ final class Turns {
 		if (session.firstPrompt == null && !request.text().isEmpty()) {
 			session.firstPrompt = Titles.truncate(request.text());
 		}
-		echoUserMessage(session, request.text(), composer.echo(request), null);
-		composer.sent(request);
+		echoPrompt(session, request, composer, null);
 		return runTurn(agent, session, blocks);
+	}
+
+	/** Show a prompt as the user's message, with what the composer adds to it; the chips attached for it are used up. */
+	String echoPrompt(ChatSession session, PromptRequest request, PromptComposer composer, DeliveryState delivery) {
+		String messageId = echoUserMessage(session, request.text(), composer.echo(request), delivery);
+		composer.sent(request);
+		return messageId;
 	}
 
 	/** Asks the interceptors in turn; completes on the controller thread with whether one took the prompt. */

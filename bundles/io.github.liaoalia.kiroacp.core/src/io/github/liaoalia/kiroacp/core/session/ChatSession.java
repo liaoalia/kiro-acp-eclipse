@@ -37,9 +37,13 @@ final class ChatSession {
 	boolean loading;
 	/** Tool calls replayed by {@code session/load}: their terminal ids are of an earlier run and never resolved against live terminals. */
 	final Set<String> replayedToolCalls = new HashSet<>();
-	/** The session is being closed: nothing may start another turn on it. */
+	/** The session is being closed or replaced: nothing may start another turn on it. */
 	boolean closing;
-	/** While {@code /clear} replaces the session: the id of the session that takes its place, {@code null} when that failed. */
+	/**
+	 * While the session is being replaced (reference D22, {@code /clear}):
+	 * completes with the id of the session that took its place, {@code null}
+	 * when none could. A prompt typed meanwhile waits for it and goes there.
+	 */
 	CompletableFuture<String> replacement;
 	/** Bumped whenever a turn starts or ends, so a late answer can tell it is late. */
 	int turnGeneration;

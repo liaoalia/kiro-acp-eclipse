@@ -9,12 +9,13 @@ import org.osgi.framework.FrameworkUtil;
 
 import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.ChatHost;
-import io.github.liaoalia.kiroacp.core.session.SignInFlow;
+import io.github.liaoalia.kiroacp.core.session.auth.SignIn;
 import io.github.liaoalia.kiroacp.core.session.commands.SlashCommands;
 import io.github.liaoalia.kiroacp.core.session.commands.UsageTracker;
 import io.github.liaoalia.kiroacp.core.session.history.PastSessions;
 import io.github.liaoalia.kiroacp.core.session.history.RememberedOptions;
 import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
+import io.github.liaoalia.kiroacp.core.session.steering.Steering;
 import io.github.liaoalia.kiroacp.ui.diff.CompareDiffEditors;
 import io.github.liaoalia.kiroacp.ui.context.KiroContext;
 import io.github.liaoalia.kiroacp.ui.plan.KiroPlan;
@@ -77,17 +78,19 @@ public final class KiroChat {
 
 	/**
 	 * The features of the chat. The order matters where two of them see the
-	 * same prompt: the images of a message are checked (context) before it is
-	 * taken for a slash command.
+	 * same thing: the images of a message are checked (context) before it is
+	 * taken for a slash command, and after a turn the next queued prompt goes
+	 * out (steering) before the usage is asked for.
 	 */
 	static void install(ChatController controller, Services services, Display display) {
 		EclipseLogger logger = services.logger();
-		SignInFlow.install(controller);
+		SignIn signIn = SignIn.install(controller);
 		PastSessions.install(controller, new DialogSessionPicker(display));
 		RememberedOptions remembered = RememberedOptions.install(controller, new PreferenceOptionMemory(logger));
 		DiffReview.install(controller, services.host(), new CompareDiffEditors(logger));
 		KiroContext.install(controller, services.host(), display);
-		SlashCommands.install(controller, remembered::describe);
+		Steering.install(controller);
+		SlashCommands.install(controller, remembered::describe, signIn);
 		UsageTracker.install(controller);
 		KiroPlan.install(controller);
 	}

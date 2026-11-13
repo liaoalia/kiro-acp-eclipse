@@ -184,27 +184,35 @@ Each task owns one package in `core` and one in `ui`, handles its own `FromWebvi
 
 ### Task 11: Diff review in the Compare editor
 Owns: `core/.../pure/diff/`, `ui/.../diff/`. Reference: `src/features/diff.ts`, `pure/diffState.ts`, D7.
-- [ ] diff bookkeeping port with the `features-diffState` test cases
-- [ ] `openDiff` opens a `CompareEditorInput` (original vs. proposed, proposed side editable) with Accept and Reject in its toolbar; both resolve the pending permission, as do the chat card buttons
-- [ ] the edited proposed text is what gets written; `autoOpenDiffs` preference; compare editors close on resolution
-- [ ] tests ported from `test/e2e/f2-diff.e2e.ts`
-- [ ] run the validation commands
+- [x] diff bookkeeping port with the `features-diffState` test cases
+- [x] `openDiff` opens a `CompareEditorInput` (original vs. proposed, proposed side editable) with Accept and Reject in its toolbar; both resolve the pending permission, as do the chat card buttons
+- [x] the edited proposed text is what gets written; `autoOpenDiffs` preference; compare editors close on resolution
+- [x] tests ported from `test/e2e/f2-diff.e2e.ts`
+- [x] run the validation commands
+- ⚠️ `ui/diff/CompareDiffEditors` (opening, finding and closing the compare editor in the workbench) is executed by no test; the compare input itself is tested in a shell that is never opened. Owed: one look in a running Eclipse, also at a `.java` file with JDT's compare viewer
+- ➕ not ported: the reference's `acceptDiff` / `rejectDiff` commands; Accept and Reject are buttons above the compare panes
 
 ### Task 12: File, selection and image context
 Owns: `core/.../pure/context/`, `ui/.../context/`. Reference: `src/features/context.ts`, `pure/contentBlocks.ts`, `pure/fileSearch.ts`, `src/ui/images.ts`, D10.
-- [ ] content block builders and file search ranking with the reference test cases
-- [ ] `queryFiles` → `fileSuggestions`, `removeChip`, active-editor chip (`attachActiveFile`), "Send Selection to Kiro Chat" command with `Ctrl+Alt+K`
-- [ ] `pickImages` and `dropFiles` → `imagesAttached`, with the reference size and type limits
-- [ ] tests: selection chip block, suggestion list for a sample project, image rejection reasons
-- [ ] run the validation commands
+- [x] content block builders and file search ranking with the reference test cases
+- [x] `queryFiles` → `fileSuggestions`, `removeChip`, active-editor chip (`attachActiveFile`), "Send Selection to Kiro Chat" command with `Ctrl+Alt+K`
+- [x] `pickImages` and `dropFiles` → `imagesAttached`, with the reference size and type limits
+- [x] tests: selection chip block, suggestion list for a sample project, image rejection reasons
+- [x] run the validation commands
+- ⚠️ dropping files from the OS or an Eclipse view onto the chat: the host side of `dropFiles` is there and tested, but the embedded page most likely never sends it (a Chromium page gets such a drop as file bytes without a path, which the page handles itself for images and refuses for other files). Not verified in a running Eclipse; `@` is the way to attach a file
+- ⚠️ executed by no test: `WorkbenchEditorContext` against a real editor, `ImageFileDialog.open`, `SendSelectionHandler.execute`, the editor context-menu entry
+- ➕ not ported here, left to their tasks: F16.5 and F16.10 (slash commands), F16.8 and F16.9 (steering and queue)
 
 ### Task 13: Sessions and history
 Owns: `core/.../session/history/`, `ui/.../sessions/`. Reference: D19–D21, D24, `f10-sessions`, `f11-history` e2e.
-- [ ] `selectSession`, `closeSession`, `sessions` updates; closing the view ends its sessions
-- [ ] `browseSessions`: a JFace dialog over `session/list`, then `session/load` replayed into the transcript
-- [ ] remember mode, model and config options across sessions; "Forget Remembered Session Options" command
-- [ ] tests ported from the two e2e files
-- [ ] run the validation commands
+- [x] `selectSession`, `closeSession`, `sessions` updates; closing the view ends its sessions
+- [x] `browseSessions`: a JFace dialog over `session/list`, then `session/load` replayed into the transcript
+- [x] remember mode, model and config options across sessions; "Forget Remembered Session Options" command
+- [x] tests ported from the two e2e files
+- [x] run the validation commands
+- ⚠️ executed by no test: opening the past-sessions dialog (`DialogSessionPicker.pick`) and the message of the Forget command; the dialog's content and filter are tested without opening it
+- ➕ not ported: a workbench command "Open Past Session…" (the page's history button opens the dialog); the `/capabilities` line about remembered options (Task 16); restoring a view's sessions after a sign-in restart (Task 15)
+- ⚠️ unverified: whether the real `kiro-cli` honours the `_meta.kiro` hints on `session/new` (the fake agent ignores them, as in the reference)
 
 ### Task 14: Steering and queued prompts
 Owns: `core/.../session/steering/`. Reference: D22, `f12-steering` e2e.

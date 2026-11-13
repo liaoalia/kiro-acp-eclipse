@@ -39,10 +39,17 @@ final class SignInTerminal {
 	/** The file the script leaves the command's exit code in. */
 	static final String STATUS_FILE = "exit-code";
 
-	/** Terminal programs of Linux desktops with the option that makes them run a program, most general first. */
+	/**
+	 * Terminal programs of Linux desktops with what makes them run a program
+	 * (some take it as their own arguments and need nothing): the system's
+	 * choice first, then those of the desktops, then the ones people install
+	 * themselves.
+	 */
 	private static final List<List<String>> LINUX_TERMINALS = List.of(List.of("x-terminal-emulator", "-e"),
-			List.of("gnome-terminal", "--"), List.of("konsole", "-e"), List.of("xfce4-terminal", "-x"),
-			List.of("xterm", "-e"));
+			List.of("gnome-terminal", "--"), List.of("ptyxis", "--"), List.of("kgx", "-e"), List.of("konsole", "-e"),
+			List.of("xfce4-terminal", "-x"), List.of("mate-terminal", "-x"), List.of("lxterminal", "-e"),
+			List.of("tilix", "-e"), List.of("kitty"), List.of("alacritty", "-e"), List.of("foot"),
+			List.of("wezterm", "start", "--"), List.of("xterm", "-e"));
 
 	private static final Pattern ENV_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 	private static final Pattern NOT_TITLE = Pattern.compile("[^A-Za-z0-9 ._-]");
@@ -72,8 +79,10 @@ final class SignInTerminal {
 			throws IOException {
 		List<String> terminal = platform == Platform.LINUX ? linuxTerminal(onPath) : List.of();
 		if (terminal == null) {
+			// Shown to the user as it is: what was tried, and the way out that needs none of it.
 			throw new IOException("No terminal program found to run the sign-in in (looked for "
-					+ String.join(", ", LINUX_TERMINALS.stream().map(each -> each.get(0)).toList()) + ")");
+					+ String.join(", ", LINUX_TERMINALS.stream().map(each -> each.get(0)).toList())
+					+ "). Run this in a terminal yourself, then restart the agent: " + displayLine(signIn));
 		}
 		Path directory = Files.createTempDirectory("kiro-signin");
 		Path status = directory.resolve(STATUS_FILE);
@@ -87,28 +96,43 @@ final class SignInTerminal {
 			break;
 		case MAC:
 			// Terminal runs a file of this extension when asked to open it.
-			script = directory.resolve("signin.command");
-			Files.writeString(script, posixScript(signIn, status, false), StandardCharsets.UTF_8);
+			script = ownerOnly(directory.resolve("signin.command"));
+			Files.writeString(script, posixScript(signIn, status, false, script), StandardCharsets.UTF_8);
 			argv = macCommand(script);
 			break;
 		default:
-			script = directory.resolve("signin.sh");
-			Files.writeString(script, posixScript(signIn, status, true), StandardCharsets.UTF_8);
+			script = ownerOnly(directory.resolve("signin.sh"));
+			Files.writeString(script, posixScript(signIn, status, true, script), StandardCharsets.UTF_8);
 			argv = linuxCommand(terminal, script);
 			break;
-		}
-		if (platform != Platform.WINDOWS) {
-			try {
-				Files.setPosixFilePermissions(script, PosixFilePermissions.fromString("rwx------"));
-			} catch (UnsupportedOperationException notPosix) {
-				// The script is then started through sh by whoever runs it.
-			}
 		}
 		// Not deleted when the sign-in is over: on Windows the window may still be reading
 		// its script. The directory holds two small files and goes with the JVM.
 		directory.toFile().deleteOnExit();
 		script.toFile().deleteOnExit();
 		return new Plan(directory, script, status, argv);
+	}
+
+	/**
+	 * The script's file, empty, executable and its owner's alone from the
+	 * moment it exists: it may come to hold the variables of the sign-in
+	 * method. (The directory around it is the owner's alone as well.)
+	 */
+	private static Path ownerOnly(Path script) throws IOException {
+		try {
+			return Files.createFile(script, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+		} catch (UnsupportedOperationException notPosix) {
+			// A file system without such permissions: whoever runs the script starts it through sh.
+			return script;
+		}
+	}
+
+	/** The sign-in as the user would type it, for a message. */
+	private static String displayLine(SignIn signIn) {
+		List<String> words = new ArrayList<>();
+		words.add(signIn.command());
+		words.addAll(signIn.args());
+		return String.join(" ", words.stream().map(word -> word.isEmpty() || word.indexOf(' ') >= 0 ? '"' + word + '"' : word).toList());
 	}
 
 	/** Removes what {@link #prepare} wrote, once the script has run to its end. */
@@ -273,23 +297,44 @@ final class SignInTerminal {
 	}
 
 	/**
-	 * The shell script a sign-in runs from. The environment is in it: a terminal
-	 * program usually hands the window to a process that is already running, and
-	 * that one does not have the variables of whoever asked.
+	 * {@link #posixScript(SignIn, Path, boolean, Path)} for a script that
+	 * stays where it is.
+	 */
+	static String posixScript(SignIn signIn, Path status, boolean holdOnFailure) {
+		return posixScript(signIn, status, holdOnFailure, null);
+	}
+
+	/**
+	 * The shell script a sign-in runs from. The variables of the sign-in
+	 * method are in it: a terminal program usually hands the window to a
+	 * process that is already running, and that one does not have the
+	 * environment of whoever asked. Only those variables: nothing of the
+	 * IDE's own environment is ever written.
+	 *
+	 * <p>A script that sets variables removes its own file before anything
+	 * else. The shell that runs it has it open and reads on, so what an agent
+	 * put into those variables is on disk until the window is up, not for as
+	 * long as the sign-in takes or the IDE runs.
 	 *
 	 * @param holdOnFailure keep the window open after a failure until Enter is pressed, for
 	 *                      terminals that close with their program
+	 * @param self          where the script will be, for the removal; {@code null}: it stays
 	 */
-	static String posixScript(SignIn signIn, Path status, boolean holdOnFailure) {
+	static String posixScript(SignIn signIn, Path status, boolean holdOnFailure, Path self) {
 		String target = status.toString();
-		StringBuilder script = new StringBuilder();
-		script.append("#!/bin/sh\n");
-		script.append("printf '\\033]0;%s\\007' ").append(quote(title(signIn.title()))).append('\n');
+		StringBuilder exports = new StringBuilder();
 		for (Map.Entry<String, String> each : new TreeMap<>(signIn.env()).entrySet()) {
 			if (ENV_NAME.matcher(each.getKey()).matches()) {
-				script.append("export ").append(each.getKey()).append('=').append(quote(each.getValue())).append('\n');
+				exports.append("export ").append(each.getKey()).append('=').append(quote(each.getValue())).append('\n');
 			}
 		}
+		StringBuilder script = new StringBuilder();
+		script.append("#!/bin/sh\n");
+		if (self != null && exports.length() > 0) {
+			script.append("rm -f ").append(quote(self.toString())).append('\n');
+		}
+		script.append("printf '\\033]0;%s\\007' ").append(quote(title(signIn.title()))).append('\n');
+		script.append(exports);
 		script.append(quote(signIn.command()));
 		for (String arg : signIn.args()) {
 			script.append(' ').append(quote(arg));

@@ -30,7 +30,7 @@ import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.ChatHooks;
 import io.github.liaoalia.kiroacp.core.session.ChatHooks.PromptRequest;
 import io.github.liaoalia.kiroacp.core.session.PageHandle;
-import io.github.liaoalia.kiroacp.core.session.SignInFlow;
+import io.github.liaoalia.kiroacp.core.session.auth.SignIn;
 
 /**
  * Slash commands, run on the client (the reference's {@code runSlash} and
@@ -53,10 +53,12 @@ public final class SlashCommands implements AutoCloseable {
 	private final ChatController controller;
 	private final UiScheduler scheduler;
 	private final Supplier<String> remembered;
+	private final SignIn signIn;
 	private final List<Subscription> subscriptions = new ArrayList<>();
 	private int localSeq;
 
-	private SlashCommands(ChatController controller, Supplier<String> remembered) {
+	private SlashCommands(ChatController controller, Supplier<String> remembered, SignIn signIn) {
+		this.signIn = signIn;
 		this.controller = controller;
 		this.scheduler = controller.host().scheduler();
 		this.remembered = remembered;
@@ -65,9 +67,10 @@ public final class SlashCommands implements AutoCloseable {
 	/**
 	 * @param remembered what {@code /capabilities} says is remembered for new sessions
 	 *                   ({@code RememberedOptions.describe()}); {@code null} to leave the line out
+	 * @param signIn     what {@code /login} runs; {@code null} when signing in is not installed
 	 */
-	public static SlashCommands install(ChatController controller, Supplier<String> remembered) {
-		SlashCommands commands = new SlashCommands(controller, remembered);
+	public static SlashCommands install(ChatController controller, Supplier<String> remembered, SignIn signIn) {
+		SlashCommands commands = new SlashCommands(controller, remembered, signIn);
 		ChatHooks hooks = controller.hooks();
 		commands.subscriptions.add(hooks.addPromptInterceptor(commands::intercept));
 		hooks.setCommandCatalogue(SlashCommands::catalogue);
@@ -105,8 +108,7 @@ public final class SlashCommands implements AutoCloseable {
 			// `/login` and `/restart` exist for exactly this state (signed out, crashed):
 			// they run without a session or a ready agent.
 			if (parsed.name().equals("login")) {
-				SignInFlow.signIn(controller, null);
-				return done(true);
+				return login().thenApply(signedIn -> true);
 			}
 			if (parsed.name().equals("restart")) {
 				return controller.restart().handle((restarted, error) -> true);
@@ -151,7 +153,7 @@ public final class SlashCommands implements AutoCloseable {
 			if (fresh.replace()) {
 				return quiet(controller.replaceSession(sessionId, request.page()), "/clear");
 			}
-			PageHandle page = controller.pageDisplaying(sessionId, request.page());
+			PageHandle page = request.page() != null && sessionId.equals(request.page().sessionId()) ? request.page() : null;
 			return quiet(controller.newSession(page), "/new");
 		}
 		if (action instanceof Action.Capabilities) {
@@ -161,7 +163,7 @@ public final class SlashCommands implements AutoCloseable {
 		} else if (action instanceof Action.Restart) {
 			return quiet(controller.restart(), "/restart");
 		} else if (action instanceof Action.Login) {
-			SignInFlow.signIn(controller, null);
+			return login();
 		} else if (action instanceof Action.Help help) {
 			localExchange(sessionId, raw, Slash.describeHelp(help));
 		} else if (action instanceof Action.ShowOptions show) {
@@ -237,6 +239,15 @@ public final class SlashCommands implements AutoCloseable {
 			// steered or queued as any other prompt typed then.
 			return quiet(controller.prompt(plan.text(), request.chips(), request.images(), sessionId, null), "/plan");
 		});
+	}
+
+	/** Sign in with the agent's own method and reconnect, as the page's button does. */
+	private CompletableFuture<Void> login() {
+		if (signIn == null) {
+			controller.notice(null, Severity.WARNING, "Signing in is not available here.");
+			return done(null);
+		}
+		return quiet(signIn.login(null), "/login");
 	}
 
 	/** Show the user's command and a local reply in the transcript. */

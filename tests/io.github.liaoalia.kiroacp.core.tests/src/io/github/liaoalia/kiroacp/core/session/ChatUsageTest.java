@@ -108,7 +108,7 @@ class ChatUsageTest {
 			UsageTracker.install(h.controller);
 			Client view = h.openView("view");
 			// For `/context`; after the view, whose commands the harness waits for.
-			SlashCommands.install(h.controller, null);
+			SlashCommands.install(h.controller, null, null);
 			int mark = view.mark();
 			view.turn("/scenario chat");
 			view.page.await(ToWebview.Usage.class, mark, u -> u.usage().contextPercent() != null, "the polled percentage");

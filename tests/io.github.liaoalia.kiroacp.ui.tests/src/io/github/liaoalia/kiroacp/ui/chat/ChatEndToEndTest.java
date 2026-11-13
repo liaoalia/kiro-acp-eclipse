@@ -46,6 +46,7 @@ import io.github.liaoalia.kiroacp.core.session.ChatController;
 import io.github.liaoalia.kiroacp.core.session.history.PastSessions;
 import io.github.liaoalia.kiroacp.core.session.diff.DiffEditors;
 import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
+import io.github.liaoalia.kiroacp.core.session.steering.Steering;
 import io.github.liaoalia.kiroacp.ui.services.Prompts;
 
 /**
@@ -453,6 +454,40 @@ class ChatEndToEndTest {
 		assertEquals(2.0, evaluate("return document.querySelectorAll('.items .msg-user').length;"));
 		assertEquals("past-1", link.page().sessionId());
 		assertEquals(1, launches.size(), "one agent process");
+	}
+
+	// --- Prompts during a turn ---
+
+	@Test
+	void aPromptTypedWhileTheAgentAnswersWaitsWithABadgeAndIsSentWhenTheTurnIsOver() {
+		start("chat");
+		Steering steering = Steering.install(controller);
+		// As for an agent that cannot steer: what is typed during a turn waits for its end.
+		steering.setSteerUnsupported(link.page().sessionId(), true);
+		// The page learns from its state that prompts are taken during a turn; a page opened after the feature has it from the start.
+		link.page().setSession(link.page().sessionId());
+		String stop = ".composer-box [data-action=\"cancel\"]:not([hidden])";
+
+		// 20 chunks, 100 ms apart.
+		type("/scenario slow");
+		await(() -> agentText().contains("slow 1 "), "the reply to be streaming");
+		assertEquals(1.0, evaluate("return document.querySelectorAll(" + js(stop) + ").length;"), "Stop has a button of its own");
+
+		type("And what is the answer?");
+
+		awaitPage("return document.querySelectorAll('.items .msg-user .delivery.delivery-queued').length === 1;",
+				"the prompt to be shown as queued; " + describe());
+		assertFalse(agentText().contains("slow 19"), "typed and shown while the turn was still running");
+		assertEquals(2.0, evaluate("return document.querySelectorAll('.items .msg-user').length;"));
+		assertEquals("", evaluate("return document.querySelector('.composer-box textarea').value;"), "the input box is empty again");
+
+		// The turn ends, the queued prompt is sent by itself and answered by the launch scenario.
+		await(() -> agentText().contains("slow 19") && agentText().endsWith("The answer is 42."), "the queued prompt's reply");
+		awaitIdle();
+		assertEquals(0.0, evaluate("return document.querySelectorAll('.items .delivery').length;"), "no badge is left");
+		assertEquals(2.0, evaluate("return document.querySelectorAll('.items .msg-user').length;"), "the queued prompt was shown once");
+		assertEquals(2, protocol.stream().filter(line -> line.startsWith("SEND") && line.contains("\"session/prompt\"")).count(), describe());
+		assertEquals(0, protocol.stream().filter(line -> line.contains("_session/steer")).count(), "the agent was not asked to steer");
 	}
 
 	// --- helpers ---
