@@ -4,7 +4,7 @@ Chat with the Kiro agent inside Eclipse over the Agent Client Protocol (ACP). Th
 
 It is a port of the VS Code extension of the same name. The chat page is that extension's webview, unchanged, shown in an SWT `Browser`; the host side is Java.
 
-**Status: early.** Chat with streaming, tool cards, permissions, file access, agent terminals, modes and models work against the test agent. Not ported yet: diff review, file and image context, session history, steering, slash commands, the sign-in button. It has not been run against a real `kiro-cli` yet. The plan is in `docs/plans/`.
+**Status: early.** Chat with streaming, tool cards, permissions, file access, agent terminals, modes and models work against the test agent. Not ported yet: diff review, file and image context, session history, steering, slash commands. With a real `kiro-cli` 3.2 on Windows, signing in from the chat and a conversation were tried by hand; nothing else was. The plan is in `docs/plans/`.
 
 ## Requirements
 

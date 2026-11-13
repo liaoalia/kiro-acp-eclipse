@@ -327,6 +327,13 @@ public final class PermissionManager implements AutoCloseable {
 		}
 	}
 
+	/** The ids of the pending requests, oldest first. */
+	public List<String> pendingIds() {
+		synchronized (lock) {
+			return List.copyOf(entries.keySet());
+		}
+	}
+
 	/** @return the pending request, or {@code null} */
 	public PermissionView get(String requestId) {
 		PendingPermission record = getEntry(requestId);

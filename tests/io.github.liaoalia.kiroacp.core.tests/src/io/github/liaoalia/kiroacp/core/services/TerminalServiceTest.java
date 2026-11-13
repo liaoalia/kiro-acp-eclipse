@@ -16,6 +16,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -505,6 +507,112 @@ class TerminalServiceTest {
 		waitForExit(next);
 		assertEquals("again", outputOf(next).strip());
 		assertEquals(2, display.consoles().size(), "a closed shared console is not used again");
+	}
+
+	/** The agent is gone but its sessions are still shown: everything ends, nothing is forgotten. */
+	@Test
+	void killAllStopsTheRunningCommandsOfEverySessionAndKeepsTheTerminals() throws Exception {
+		String done = create(command("s1", "echo", "done"));
+		waitForExit(done);
+		String first = create(command("s1", announceAndSleep("first")));
+		String other = create(command("s2", announceAndSleep("other")));
+		ObjectNode anonymous = command("unused", announceAndSleep("anonymous"));
+		anonymous.remove("sessionId");
+		String nobodys = create(anonymous);
+		List<Process> shells = List.of(service.processOf(first), service.processOf(other), service.processOf(nobodys));
+		awaitRunning(first);
+		awaitRunning(other);
+		awaitRunning(nobodys);
+
+		assertEquals(List.of(first, other, nobodys), get(service.killAll()));
+
+		waitForExit(first);
+		waitForExit(other);
+		waitForExit(nobodys);
+		Fakes.await(() -> shells.stream().noneMatch(Process::isAlive), "the commands to end");
+		assertEquals(List.of(done, first, other, nobodys), service.activeIds(), "the terminals stay valid");
+		assertTrue(service.snapshot(first, "s1").exited());
+		assertTrue(service.snapshot(first, "s1").output().contains("first"), "and readable");
+		assertTrue(service.snapshot(other, "s2").exited());
+		assertTrue(service.showTerminal(first, "s1"), "the console is still there");
+		assertEquals(List.of(), get(service.killAll()));
+
+		String next = create(command("s1", "echo", "again"));
+		waitForExit(next);
+		assertEquals("again", outputOf(next).strip());
+	}
+
+	/** A command whose console is slow to open is not started once the agent that asked for it is gone. */
+	@Test
+	void aCommandAskedForBeforeEverythingWasEndedIsNotStarted() throws Exception {
+		CountDownLatch opening = new CountDownLatch(1);
+		CountDownLatch opened = new CountDownLatch(1);
+		TerminalService slow = new TerminalService(settings, new Fakes.FakeWorkspace(dir), (target, closedByUser) -> {
+			opening.countDown();
+			try {
+				opened.await(Fakes.SECONDS, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return null;
+		}, logger);
+		try {
+			CompletableFuture<JsonNode> asked = slow.createTerminal(command("s1", announceAndSleep("never")));
+			assertTrue(opening.await(Fakes.SECONDS, TimeUnit.SECONDS), "the console to be asked for");
+
+			assertEquals(List.of(), get(slow.killAll()), "nothing runs yet");
+			opened.countDown();
+
+			assertEquals("The agent's terminals were ended before the command was started", failure(asked).getMessage());
+			assertEquals(List.of(), slow.activeIds());
+			// What is asked for afterwards runs.
+			JsonNode next = get(slow.createTerminal(command("s1", "echo", "again")));
+			get(slow.waitForTerminalExit(id(next.path("terminalId").asText())));
+		} finally {
+			opened.countDown();
+			slow.close();
+		}
+	}
+
+	/** A session was closed: its commands end and its terminals are forgotten, the others are untouched. */
+	@Test
+	void disposeSessionKillsAndForgetsTheTerminalsOfThatSessionOnly() throws Exception {
+		String finished = create(command("s1", "echo", "done"));
+		waitForExit(finished);
+		get(service.releaseTerminal(id(finished)));
+		String running = create(command("s1", announceAndSleep("started")));
+		Process shell = service.processOf(running);
+		String other = create(command("s2", announceAndSleep("other")));
+		Process otherShell = service.processOf(other);
+		awaitRunning(running);
+		awaitRunning(other);
+		RecordingConsole console = display.consoles().get(0);
+		RecordingConsole otherConsole = display.consoles().get(1);
+		assertEquals("s1", console.target.sessionId());
+		CompletableFuture<JsonNode> exit = service.waitForTerminalExit(id(running));
+
+		service.disposeSession("s1");
+
+		get(exit);
+		Fakes.await(() -> !shell.isAlive(), "the command to end");
+		assertEquals(List.of(other), service.activeIds());
+		assertNull(service.snapshot(running));
+		assertNull(service.snapshot(finished), "what the session released is forgotten too");
+		assertFalse(service.showTerminal(running));
+		assertEquals("close", console.events().get(console.events().size() - 1));
+		assertTrue(otherShell.isAlive(), "the other session's command runs on");
+		assertFalse(service.snapshot(other, "s2").exited());
+		assertFalse(otherConsole.events().contains("close"));
+		assertTrue(service.showTerminal(other, "s2"));
+		// The agent may still let go of what it held: that is refused, and breaks nothing.
+		assertEquals("Unknown terminal: " + running, failure(service.releaseTerminal(id(running))).getMessage());
+
+		service.disposeSession("s1");
+		service.disposeSession("nobody");
+		String next = create(command("s1", "echo", "again"));
+		waitForExit(next);
+		assertEquals("again", outputOf(next).strip());
+		assertEquals(3, display.consoles().size(), "a closed shared console is not used again");
 	}
 
 	@Test

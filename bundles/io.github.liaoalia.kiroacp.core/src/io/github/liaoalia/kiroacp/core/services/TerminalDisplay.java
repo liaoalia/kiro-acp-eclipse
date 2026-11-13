@@ -75,7 +75,7 @@ public interface TerminalDisplay {
 		 */
 		void reveal(boolean focus);
 
-		/** Remove the console. Called for shared consoles when the service is disposed. */
+		/** Remove the console. Called for a shared console when its session or the whole service is disposed. */
 		void close();
 	}
 

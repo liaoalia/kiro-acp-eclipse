@@ -236,6 +236,29 @@ class EclipseWorkspaceTest {
 	}
 
 	@Test
+	void theSameEditorReportedAgainDoesNotOutdateTheSelection() throws CoreException {
+		IProject alpha = project("alpha");
+		IProject beta = project("beta");
+		workspace.activeInputChanged(new Input(alpha.getFile("notes.txt")));
+		workspace.selectionChanged(new StructuredSelection(beta));
+
+		// What the part listener does when the chat view, or any other part, is activated.
+		workspace.activeInputChanged(new Input(alpha.getFile("notes.txt")));
+		assertEquals(location(beta), workspace.defaultCwd(), "the same editor again");
+
+		workspace.activeInputChanged(new Input(alpha.getFile("other.txt")));
+		assertEquals(location(alpha), workspace.defaultCwd(), "another file of the same project is a later choice");
+
+		workspace.selectionChanged(new StructuredSelection(beta));
+		workspace.activeInputChanged(null);
+		workspace.activeInputChanged(null);
+		assertEquals(location(beta), workspace.defaultCwd(), "no editor, reported twice");
+
+		workspace.activeInputChanged(new Input(alpha.getFile("notes.txt")));
+		assertEquals(location(alpha), workspace.defaultCwd(), "an editor opened after the selection");
+	}
+
+	@Test
 	void aSelectionThatIsNotAResourceChangesNothing() throws CoreException {
 		project("alpha");
 		IProject beta = project("beta");

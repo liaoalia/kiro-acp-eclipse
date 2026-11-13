@@ -215,6 +215,13 @@ final class SessionRoster {
 		}
 		c.sessions.clear();
 		c.kinds.clear();
+		// Whatever the agent started for them, running or not, goes with them, also the
+		// commands of requests that named no session.
+		try {
+			c.terminal.disposeAll();
+		} catch (RuntimeException e) {
+			c.logger.warn("could not end the terminals of the sessions: " + Async.message(e));
+		}
 		for (PageBinding page : List.copyOf(c.pages)) {
 			if (page.displayed != null) {
 				page.displayed = null;
@@ -300,6 +307,13 @@ final class SessionRoster {
 			c.permissions.clearPolicies(sessionId);
 			c.sessions.remove(sessionId, session);
 			c.kinds.forget(sessionId);
+			// Its commands end with it, whether a turn was running or not: once the session
+			// is gone nothing else would end them. Never a reason not to close.
+			try {
+				c.terminal.disposeSession(sessionId);
+			} catch (RuntimeException e) {
+				c.logger.warn("session " + sessionId + " close: could not end its terminals: " + Async.message(e));
+			}
 			c.logger.info("session " + sessionId + " closed");
 
 			boolean wasFocused = sessionId.equals(c.focusedId);

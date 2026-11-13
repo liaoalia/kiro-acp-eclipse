@@ -215,6 +215,7 @@ Owns: `core/.../session/auth/`, `ui/.../auth/`. Reference: D25, `src/features/se
 - [ ] sign-in offered from any "not logged in" failure; signed out means `logout` then one fresh terminal sign-in, never a token refresh
 - [ ] `login` runs the CLI in a terminal the user can type into (TM Terminal if installed, otherwise an external terminal window); `_kiro/openExternalUrl` opens the system browser after confirming the host
 - [ ] tests with the fake agent's `--auth-required`
+- [x] ➕ done ahead of the rest (0.1.0): the page's sign-in button runs the agent's terminal method in a system terminal window and restarts the agent afterwards (`core/session/SignInFlow`, `ui/services/SignInTerminal`), with `SignInFlowTest` and `SignInTerminalTest`; a URL the agent asks to open goes to the system browser after a confirmation
 - [ ] run the validation commands
 
 ### Task 16: Slash commands, usage and plan document
@@ -240,7 +241,7 @@ Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui
 
 ## Technical Details
 - Page bridge: page → host is `window.__kiroHost(json)` (a `BrowserFunction`, handled with `asyncExec` so the browser is never re-entered from its own callback); host → page is `Browser.execute("window.__kiroReceive(<json>)")`, which dispatches a `message` event like VS Code does.
-- Threading: one reader thread per agent process parses NDJSON and dispatches in wire order to a single-threaded session executor; the controller reduces events there and posts one message per event to the UI thread (no coalescing of `chunk` bursts, see D6).
+- Threading: one reader thread per agent process parses NDJSON and hands events over in wire order to the controller's thread, which in Eclipse is the SWT display thread (`DisplayScheduler`; a plain single-thread executor in tests). The controller reduces events there and posts one message per event to the page (no coalescing of `chunk` bursts, see D6).
 - Fake agent in tests: `node tests/fixtures/fake-agent/agent.mjs acp --scenario <name>`; it imports `@agentclientprotocol/sdk`, so the fixtures folder has its own `package.json` and `npm ci` runs before the tests.
 
 ## Post-Completion

@@ -133,6 +133,8 @@ public final class TerminalService implements AutoCloseable {
 		volatile ExitStatus exit;
 		/** {@code null} when the process could not be started. */
 		volatile Process process;
+		/** It was to be killed before its process existed: the start ends it as soon as there is one. */
+		volatile boolean doomed;
 		/** Where this command is mirrored; {@code null} in hidden mode. */
 		volatile Mirror mirror;
 		/** Shared mode, for a command started while another one runs. Used under the mirror's monitor. */
@@ -185,6 +187,11 @@ public final class TerminalService implements AutoCloseable {
 	/** Shared mode: the session's console, present while it is open. */
 	private final Map<String, Mirror> shared = new HashMap<>();
 	private final AtomicLong counter = new AtomicLong();
+	/**
+	 * How often everything was ended ({@link #killAll()}, {@link #disposeAll()}).
+	 * A command asked for before the last time is not started. Under the lock.
+	 */
+	private long sweeps;
 	private volatile boolean closed;
 	/**
 	 * Random per-run id baked into every terminal id, so ids of an earlier run
@@ -227,10 +234,14 @@ public final class TerminalService implements AutoCloseable {
 		}
 		String id = TerminalPresentation.makeTerminalId(runId, counter.incrementAndGet());
 		CompletableFuture<JsonNode> result = new CompletableFuture<>();
+		long asked;
+		synchronized (lock) {
+			asked = sweeps;
+		}
 		try {
 			starter.execute(() -> {
 				try {
-					start(id, req);
+					start(id, req, asked);
 					result.complete(JSON.objectNode().put("terminalId", id));
 				} catch (Throwable e) {
 					// Whatever it is, the agent must get an answer.
@@ -295,10 +306,31 @@ public final class TerminalService implements AutoCloseable {
 	 * @return the ids that were killed
 	 */
 	public CompletableFuture<List<String>> killSession(String sessionId) {
+		return killRunning(sessionId);
+	}
+
+	/**
+	 * {@link #killSession} for every session, the one of the requests without a
+	 * session id included: the agent is gone, and nothing it started may outlive
+	 * it. The terminals stay valid and readable, for the tool cards of the
+	 * sessions that are still shown. A command the agent asked for that has not
+	 * been started yet is not started.
+	 *
+	 * @return the ids that were killed
+	 */
+	public CompletableFuture<List<String>> killAll() {
+		return killRunning(null);
+	}
+
+	/** @param sessionId {@code null} for every session */
+	private CompletableFuture<List<String>> killRunning(String sessionId) {
 		List<Entry> running = new ArrayList<>();
 		synchronized (lock) {
+			if (sessionId == null) {
+				sweeps++;
+			}
 			for (Entry entry : active.values()) {
-				if (entry.sessionId.equals(sessionId) && entry.exit == null && !entry.killed.get()) {
+				if ((sessionId == null || entry.sessionId.equals(sessionId)) && entry.exit == null && !entry.killed.get()) {
 					running.add(entry);
 				}
 			}
@@ -415,15 +447,49 @@ public final class TerminalService implements AutoCloseable {
 	 * told to end before this returns. The service stays usable.
 	 */
 	public void disposeAll() {
-		List<Entry> entries;
-		List<Mirror> sharedConsoles;
+		dispose(null);
+	}
+
+	/**
+	 * {@link #disposeAll()} for the terminals of one session, which is gone:
+	 * its running processes are killed, its terminals forgotten (the ones it
+	 * released too) and its shared console is closed. Terminals of other
+	 * sessions are left alone.
+	 */
+	public void disposeSession(String sessionId) {
+		if (sessionId != null) {
+			dispose(sessionId);
+		}
+	}
+
+	/** @param sessionId {@code null} for every session */
+	private void dispose(String sessionId) {
+		List<Entry> entries = new ArrayList<>();
+		List<Mirror> sharedConsoles = new ArrayList<>();
 		synchronized (lock) {
-			entries = new ArrayList<>(active.values());
-			active.clear();
-			sharedConsoles = new ArrayList<>(shared.values());
-			shared.clear();
-			placements.clear();
-			released.clear();
+			if (sessionId == null) {
+				sweeps++;
+				entries.addAll(active.values());
+				active.clear();
+				sharedConsoles.addAll(shared.values());
+				shared.clear();
+				placements.clear();
+				released.clear();
+			} else {
+				active.values().removeIf(entry -> entry.sessionId.equals(sessionId) && entries.add(entry));
+				Mirror console = shared.remove(sessionId);
+				if (console != null) {
+					sharedConsoles.add(console);
+				}
+				// Every terminal ever created has a placement, which names its session.
+				placements.entrySet().removeIf(placement -> {
+					if (!placement.getValue().sessionId().equals(sessionId)) {
+						return false;
+					}
+					released.remove(placement.getKey());
+					return true;
+				});
+			}
 		}
 		for (Entry entry : entries) {
 			killNow(entry);
@@ -456,7 +522,8 @@ public final class TerminalService implements AutoCloseable {
 	// ---------------------------------------------------------------------
 
 	/** On the starter thread. */
-	private void start(String id, JsonNode req) {
+	private void start(String id, JsonNode req, long asked) {
+		refuseIfSwept(asked);
 		String command = req.get("command").textValue();
 		String sessionId = req.path("sessionId").isTextual() && !req.get("sessionId").textValue().isEmpty()
 				? req.get("sessionId").textValue()
@@ -471,9 +538,8 @@ public final class TerminalService implements AutoCloseable {
 		Entry entry = new Entry(id, sessionId, mode, new OutputBuffer(limit));
 		attachPresentation(entry, command);
 		synchronized (lock) {
-			if (closed) {
-				throw closedFailure();
-			}
+			// Opening the console may have taken a while.
+			refuseIfSwept(asked);
 			active.put(id, entry);
 		}
 		entry.write(TerminalPresentation.formatCommandHeader(commandLine, cwd));
@@ -502,9 +568,24 @@ public final class TerminalService implements AutoCloseable {
 		Workers.daemon("kiro-terminal-" + id, () -> pump(entry, process)).start();
 		process.onExit().thenRun(() -> exitedWithOpenOutput(entry, process));
 		logger.info("terminal " + id + " (" + mode + "): spawned \"" + commandLine + "\" in " + cwd);
-		if (closed) {
-			// close() ran while this one was starting and could not see it.
+		if (closed || entry.doomed) {
+			// close() or a kill ran while this one was starting and found no process to end.
 			killNow(entry);
+		}
+	}
+
+	/**
+	 * A command asked for before the service was closed, or before everything
+	 * was ended, belongs to what is gone and must not start. Under the lock.
+	 */
+	private void refuseIfSwept(long asked) {
+		synchronized (lock) {
+			if (closed) {
+				throw closedFailure();
+			}
+			if (sweeps != asked) {
+				throw new IllegalStateException("The agent's terminals were ended before the command was started");
+			}
 		}
 	}
 
@@ -795,6 +876,12 @@ public final class TerminalService implements AutoCloseable {
 	 */
 	private void killNow(Entry entry) {
 		Process process = entry.process;
+		if (process == null) {
+			// Not started yet (or it never will be): whoever starts it looks at this mark
+			// right after setting the process, so one of the two sees the other.
+			entry.doomed = true;
+			process = entry.process;
+		}
 		if (entry.exit != null || process == null || !entry.killed.compareAndSet(false, true)) {
 			return;
 		}

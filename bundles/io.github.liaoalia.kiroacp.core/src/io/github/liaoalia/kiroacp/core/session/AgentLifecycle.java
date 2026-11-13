@@ -220,12 +220,36 @@ final class AgentLifecycle {
 					c.turns.endTurn(session, "error");
 				}
 			}
+			killTerminals("the agent is gone");
 		}
 		setConnection(connectionFromAgent(change.status(), change.message()));
 		if (change.status() == ConnectionStatus.ERROR && change.message() != null && !change.message().isEmpty()) {
 			c.tell(null, Severity.ERROR, change.message());
 		}
 		c.listing.schedule();
+	}
+
+	/**
+	 * Ends every command the agent started: they are children of this
+	 * process, not of the agent, and nothing else ends them once the agent
+	 * cannot. The terminals stay readable, for the tool cards of the sessions
+	 * that are still shown.
+	 */
+	void killTerminals(String why) {
+		CompletableFuture<List<String>> killing;
+		try {
+			killing = c.terminal.killAll();
+		} catch (RuntimeException e) {
+			killing = CompletableFuture.failedFuture(e);
+		}
+		killing.whenComplete((killed, error) -> {
+			// On whichever thread did the killing: only the log is touched.
+			if (error != null) {
+				c.logger.warn(why + ": could not kill the running terminals: " + Async.message(error));
+			} else if (killed != null && !killed.isEmpty()) {
+				c.logger.info(why + ": killed running terminal(s) " + String.join(", ", killed));
+			}
+		});
 	}
 
 	void setConnection(ConnectionView view) {

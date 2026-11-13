@@ -54,8 +54,10 @@ public final class EclipseWorkspace implements Workspace {
 	private volatile IProject activeProject;
 	/** Project of the resource selected last in a view; stays when the selection moves to something else. */
 	private volatile IProject selectedProject;
-	/** Whether the selection was noted after the editor. */
+	/** Whether the selection was noted after the editor last changed. */
 	private volatile boolean selectionIsNewer;
+	/** The editor input noted last; the listeners report the same one again whenever any part is activated. */
+	private volatile IEditorInput activeInput;
 
 	// UI thread only.
 	private IWorkbench workbench;
@@ -230,8 +232,17 @@ public final class EclipseWorkspace implements Workspace {
 		return label.toString();
 	}
 
-	/** Notes the project of the editor input now on top; null for no editor. */
+	/**
+	 * Notes the project of the editor input now on top; null for no editor.
+	 * The same input reported again is not a change: the listeners call this
+	 * for every part that is activated, the chat view included, and that must
+	 * not outdate a project selected after the editor was opened.
+	 */
 	void activeInputChanged(IEditorInput input) {
+		if (Objects.equals(input, activeInput)) {
+			return;
+		}
+		activeInput = input;
 		IResource resource = null;
 		if (input != null) {
 			resource = input.getAdapter(IFile.class);

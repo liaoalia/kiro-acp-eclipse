@@ -47,12 +47,14 @@ Messages whose type starts with `host:` belong to the shim. `WebChat` handles th
 
 Eclipse's dark theme restyles its own widgets and redefines JFace's colours, but the operating system's colours stay as they are. So a system colour is used only while the system's widget background is on the same side (light or dark) as the view, and a text colour only when its contrast against the view's background is at least 3:1. Everything else falls back to the stylesheet.
 
-## D6. The controller has its own thread; chunks are not coalesced (2026-11-12)
+## D6. The controller runs on the display thread; chunks are not coalesced (2026-11-12, corrected 2026-11-13)
 
-The reader thread only hands events over: `ChatController` reduces them on a single controller thread, in wire order, and posts one webview message per event. Bursts of `chunk` are passed on as they come. The page already batches its own rendering, and merging chunks in the host would need a timer and a flush before every other message to keep the order; nothing measured so far asks for it.
+The reader thread only hands events over. `ChatController` does everything else on one thread, in wire order, and in Eclipse that thread is the SWT display thread (`DisplayScheduler`); tests give it a plain single-thread executor. Reducing an event, building the page's message and serialising it therefore share the thread with the rest of the workbench. A thread of its own was considered and not taken: the controller calls into the workbench (dialogs, editors, consoles) at many points, and nothing measured so far shows the display thread held up. If long replies make the workbench lag, this is the decision to revisit.
 
-## D7. Permission cards are synced from the queue, never in place (2026-11-12)
+One webview message is posted per event. Bursts of `chunk` are passed on as they come: the page already batches its own rendering, and merging chunks in the host would need a timer and a flush before every other message to keep the order.
 
-A permission request is answered on the reader thread, right after the `tool_call` it belongs to, while that `tool_call` is still waiting in the controller's queue. `PermissionManager.onDidChange` therefore queues the card sync onto the controller thread instead of running it where the change happened: a card can then never reach the page before its tool call.
+## D7. Permission cards follow their tool calls through the queue (2026-11-12, corrected 2026-11-13)
+
+A permission request is answered on the reader thread, right after the `tool_call` it belongs to, while that `tool_call` is still waiting in the controller's queue. A change of the pending requests therefore never updates the cards where it happens: it queues a sync onto the controller thread, behind the tool call. The sync carries the ids of the requests that were pending when it was queued and shows no card for a request that only arrived later; that request has a sync of its own, queued behind its own tool call. What a card shows and whether it is still wanted is read when the sync runs.
 
 For the same reason the kind of every announced tool call is also kept in `ToolKindIndex`, written and read on the reader thread. Kiro leaves the kind out of a permission request, and the transcripts, which live on the controller thread, have not seen the `tool_call` yet when the policy is looked up.

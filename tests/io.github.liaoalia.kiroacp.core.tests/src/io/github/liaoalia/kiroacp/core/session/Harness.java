@@ -10,12 +10,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
+import java.util.function.UnaryOperator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.liaoalia.kiroacp.core.acp.FakeAgent;
 import io.github.liaoalia.kiroacp.core.acp.api.AgentProcessOptions;
+import io.github.liaoalia.kiroacp.core.acp.api.KiroAgent;
 import io.github.liaoalia.kiroacp.core.acp.impl.KiroAgents;
 import io.github.liaoalia.kiroacp.core.model.FromWebview;
 import io.github.liaoalia.kiroacp.core.model.MessageRole;
@@ -43,6 +45,8 @@ final class Harness implements AutoCloseable {
 	final AtomicLong clock = new AtomicLong(NOW);
 	/** What the controller asked the agent factory for, one entry per (re)start. */
 	final List<AgentProcessOptions> launches = new CopyOnWriteArrayList<>();
+	/** What the controller gets in place of each agent it asks for: a test puts itself between the two here. */
+	volatile UnaryOperator<KiroAgent> agentWrapper = UnaryOperator.identity();
 	final Path dir;
 	final ChatController controller;
 	private final List<Client> clients = new ArrayList<>();
@@ -106,8 +110,8 @@ final class Harness implements AutoCloseable {
 			launches.add(options);
 			List<String> args = new ArrayList<>(List.of(script, "acp"));
 			args.addAll(agentArgs);
-			return KiroAgents.create(new AgentProcessOptions("node", args, options.cwd(), options.env(), options.logger(),
-					options.clientVersion()), services);
+			return agentWrapper.apply(KiroAgents.create(new AgentProcessOptions("node", args, options.cwd(), options.env(),
+					options.logger(), options.clientVersion()), services));
 		});
 	}
 

@@ -28,7 +28,6 @@ import io.github.liaoalia.kiroacp.core.model.UiState;
 import io.github.liaoalia.kiroacp.core.pure.transcript.TranscriptState;
 import io.github.liaoalia.kiroacp.core.services.FsService;
 import io.github.liaoalia.kiroacp.core.services.HostServices;
-import io.github.liaoalia.kiroacp.core.services.PendingPermission;
 import io.github.liaoalia.kiroacp.core.services.PermissionManager;
 import io.github.liaoalia.kiroacp.core.services.TerminalService;
 
@@ -70,7 +69,7 @@ public final class ChatController implements AutoCloseable {
 	final SessionRoster roster = new SessionRoster(this);
 	final AgentLifecycle lifecycle;
 	private final PageMessages messages = new PageMessages(this);
-	private final PermissionCards cards = new PermissionCards(this);
+	final PermissionCards cards = new PermissionCards(this);
 	private final FsService fs;
 	private final Subscription permissionChanges;
 
@@ -97,8 +96,10 @@ public final class ChatController implements AutoCloseable {
 		this.terminal = new TerminalService(host.settings(), host.workspace(), host.terminalDisplay(), logger);
 		this.services = new HostServices(permissions, fs, terminal, host.externalActions(), logger);
 		this.lifecycle = new AgentLifecycle(this, agents);
-		// Always queued, never run in place: a card must not overtake the tool call it belongs to.
-		this.permissionChanges = permissions.onDidChange(() -> async.later(cards::sync));
+		// On the thread of the change: the cards note what is pending at that moment and queue
+		// a sync that shows no more than that, so a card never overtakes the tool call that
+		// preceded its request on the wire (see PermissionCards).
+		this.permissionChanges = permissions.onDidChange(cards::changed);
 	}
 
 	/** A controller for the real agent. Nothing starts until {@link #start()} or a page says {@code ready}. */
@@ -176,6 +177,8 @@ public final class ChatController implements AutoCloseable {
 			if (current == null) {
 				return Async.done(null);
 			}
+			// Now, not when the stop is reported: until then the commands would run on without an agent.
+			lifecycle.killTerminals("agent shutdown");
 			return async.ui(current.stop()).handle((done, error) -> {
 				if (error != null) {
 					logger.warn("agent stop failed: " + Async.message(error));
@@ -251,10 +254,19 @@ public final class ChatController implements AutoCloseable {
 			agent = null;
 			pages.clear();
 			focusedPage = null;
+			// The commands the agent started are children of this process, not of the agent:
+			// they are ended here and now, before the agent is even told to stop, because the
+			// JVM may be gone before the agent is. From here on no command can be started.
+			try {
+				terminal.close();
+			} catch (RuntimeException e) {
+				logger.warn("shutdown: could not end the running terminals: " + Async.message(e));
+			}
 			// Not brought back to the controller thread: at shutdown it may be gone before the process is.
 			CompletableFuture<Void> stopped = old != null ? old.stop().handle((done, error) -> null) : Async.done(null);
 			return stopped.thenRun(() -> {
 				services.close();
+				// Again: closing twice does no harm, and this place is where the services end.
 				terminal.close();
 				fs.close();
 				permissions.close();
@@ -511,11 +523,20 @@ public final class ChatController implements AutoCloseable {
 		session.updatedAt = host.clock().getAsLong();
 	}
 
+	/**
+	 * The requests of a session that wait for an answer and whose card was
+	 * announced ({@link PermissionCards}). A request that is registered but
+	 * not announced yet is left out: the tool call it follows may still be
+	 * queued, and its card comes with the sync queued behind that.
+	 */
 	List<PermissionView> pendingFor(String sessionId) {
+		ChatSession session = sessions.get(sessionId);
 		List<PermissionView> out = new ArrayList<>();
+		if (session == null) {
+			return out;
+		}
 		for (PermissionView request : permissions.pending()) {
-			PendingPermission entry = permissions.getEntry(request.requestId());
-			if (entry != null && sessionId.equals(entry.sessionId())) {
+			if (session.knownPermissionIds.contains(request.requestId())) {
 				out.add(request);
 			}
 		}
