@@ -35,16 +35,33 @@ public final class KiroChat {
 	private final EclipseLogger logger;
 	private final EclipseWorkspace workspace;
 
-	private KiroChat(Display display) {
+	/** The Eclipse services a controller runs on, and the two of them that have to be reached again later. */
+	record Services(ChatHost host, EclipseLogger logger, EclipseWorkspace workspace) {
+	}
+
+	/**
+	 * The host of a chat controller in Eclipse. Nothing in it needs a running
+	 * workbench; what only a workbench can do (consoles, the active editor,
+	 * opening files) is then left out.
+	 *
+	 * @param prompts where its questions to the user go; dialogs in the product
+	 */
+	static Services services(Display display, Prompts prompts) {
 		PreferenceSettings settings = new PreferenceSettings();
-		logger = new EclipseLogger(settings);
-		workspace = new EclipseWorkspace();
+		EclipseLogger logger = new EclipseLogger(settings);
+		EclipseWorkspace workspace = new EclipseWorkspace();
 		workspace.start();
-		Prompts prompts = new DialogPrompts(display);
 		ChatHost host = new ChatHost(settings, workspace, logger, new DisplayScheduler(display),
 				new EclipseTextFiles(display, prompts, logger), new ConsoleTerminalDisplay(),
 				new EclipseExternalActions(prompts, logger), new EclipseChatActions(logger), version());
-		controller = ChatController.create(host);
+		return new Services(host, logger, workspace);
+	}
+
+	private KiroChat(Display display) {
+		Services services = services(display, new DialogPrompts(display));
+		logger = services.logger();
+		workspace = services.workspace();
+		controller = ChatController.create(services.host());
 		SignInFlow.install(controller);
 	}
 
