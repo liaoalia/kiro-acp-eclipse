@@ -18,6 +18,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -299,7 +300,7 @@ public final class ChatContext implements AutoCloseable {
 	 * files whose path the query's glob matches, ranked, the best {@code max}
 	 * of them. Slow.
 	 */
-	List<FileSuggestion> searchFiles(String query, int max, java.util.function.BooleanSupplier cancelled) {
+	List<FileSuggestion> searchFiles(String query, int max, BooleanSupplier cancelled) {
 		Workspace workspace = host.workspace();
 		List<Path> files = FileScan.find(workspace.roots(), query, FileSearch.searchLimit(max), host.excludedFolder(), cancelled);
 		List<FileSuggestion> items = new ArrayList<>(files.size());
