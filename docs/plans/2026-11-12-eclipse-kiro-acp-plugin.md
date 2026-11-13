@@ -262,6 +262,8 @@ Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui
 - [x] `docs/protocol-notes.md`: what was verified with the Java client
 - [x] run the validation commands
 
+- [x] ➕ released as 0.2.1 (2026-11-13). The 66 lines of production code changed since 0.2.0 were read by hand instead of a review round
+
 ## Technical Details
 - Page bridge: page → host is `window.__kiroHost(json)` (a `BrowserFunction`, handled with `asyncExec` so the browser is never re-entered from its own callback); host → page is `Browser.execute("window.__kiroReceive(<json>)")`, which dispatches a `message` event like VS Code does.
 - Threading: one reader thread per agent process parses NDJSON and hands events over in wire order to the controller's thread, which in Eclipse is the SWT display thread (`DisplayScheduler`; a plain single-thread executor in tests). The controller reduces events there and posts one message per event to the page (no coalescing of `chunk` bursts, see D6).

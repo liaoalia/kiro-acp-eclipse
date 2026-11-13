@@ -110,11 +110,7 @@ final class AgentLifecycle {
 		Settings settings = c.host.settings();
 		String command = settings.cliPath();
 		List<String> configured = settings.cliArgs();
-		// As in the reference: the setting holds extra arguments, `acp` always comes first.
-		List<String> args = new ArrayList<>(List.of("acp"));
-		if (configured != null) {
-			args.addAll(configured);
-		}
+		List<String> args = arguments(configured);
 		Path cwd = c.host.workspace().defaultCwd();
 		c.logger.info("spawning: " + command + " " + String.join(" ", args) + " (cwd " + cwd + ")");
 		KiroAgent next = agents.create(
@@ -177,6 +173,23 @@ final class AgentLifecycle {
 			});
 		}
 		return first.thenCompose(done -> c.roster.assignPendingPages());
+	}
+
+	/**
+	 * The arguments the CLI is started with. As in the reference the setting
+	 * holds extra arguments and {@code acp} always comes first. Until 0.2.0 the
+	 * setting was the whole list, so one that already begins with {@code acp}
+	 * is taken as it is.
+	 */
+	static List<String> arguments(List<String> configured) {
+		List<String> args = new ArrayList<>();
+		if (configured == null || configured.isEmpty() || !"acp".equals(configured.get(0))) {
+			args.add("acp");
+		}
+		if (configured != null) {
+			args.addAll(configured);
+		}
+		return List.copyOf(args);
 	}
 
 	private CompletableFuture<Void> teardownAgent() {

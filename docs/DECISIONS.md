@@ -112,5 +112,5 @@ Checked against the reference at 0.3.11; `ReferenceCommandsTest` and `Preference
 - **The prompt "Kiro CLI settings changed. Restart the agent to apply."** A changed path or arguments apply when the agent is next started; the preference page says so.
 - **Hiding "Cancel Current Turn" while no turn runs.** The command is always in the view menu and does nothing without a turn.
 
-One setting behaves as in the reference only since 0.2.1: the extra CLI arguments follow `acp`. Before, they replaced it, so the preference page's own example started the CLI without `acp`.
+One setting behaves as in the reference only since 0.2.1: the extra CLI arguments follow `acp`. Before, they replaced it, so the preference page's own example started the CLI without `acp`. A setting written for the old reading, one that itself begins with `acp`, is taken as it is.
 

@@ -124,4 +124,15 @@ class SessionPiecesTest {
 		JsonNode update = MAPPER.readTree(json);
 		return new SessionEvent.Update(sessionId, update, false);
 	}
+
+	@Test
+	void theCliIsStartedWithAcpFollowedByTheExtraArguments() {
+		assertEquals(List.of("acp"), AgentLifecycle.arguments(null));
+		assertEquals(List.of("acp"), AgentLifecycle.arguments(List.of()));
+		assertEquals(List.of("acp", "--agent-engine=v3"), AgentLifecycle.arguments(List.of("--agent-engine=v3")));
+		// A setting written for 0.2.0 and before, when it was the whole argument list.
+		assertEquals(List.of("acp", "--agent", "x"), AgentLifecycle.arguments(List.of("acp", "--agent", "x")));
+		assertEquals(List.of("acp"), AgentLifecycle.arguments(List.of("acp")));
+		assertEquals(List.of("acp", "--x", "acp"), AgentLifecycle.arguments(List.of("--x", "acp")));
+	}
 }
