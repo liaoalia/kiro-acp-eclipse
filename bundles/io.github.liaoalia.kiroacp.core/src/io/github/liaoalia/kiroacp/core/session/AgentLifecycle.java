@@ -167,7 +167,16 @@ final class AgentLifecycle {
 		if (old == null) {
 			return Async.done(null);
 		}
-		return c.async.ui(old.stop()).handle((done, error) -> null);
+		return c.async.ui(old.stop()).handle((done, error) -> {
+			// Its sessions were ended before it was told to stop, and until it was gone it
+			// could still ask for a command. Whatever that started has no owner.
+			try {
+				c.terminal.disposeAll();
+			} catch (RuntimeException e) {
+				c.logger.warn("could not end the terminals of the stopped agent: " + Async.message(e));
+			}
+			return null;
+		});
 	}
 
 	CompletableFuture<Void> doRestart() {

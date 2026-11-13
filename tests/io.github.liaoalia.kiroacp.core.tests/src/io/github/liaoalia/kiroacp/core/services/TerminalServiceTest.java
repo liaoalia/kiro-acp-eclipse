@@ -609,10 +609,211 @@ class TerminalServiceTest {
 
 		service.disposeSession("s1");
 		service.disposeSession("nobody");
+		// A cancel is only a request: the agent may still ask for a command of the closed session.
+		assertEquals("The session was closed before the command was started",
+				failure(service.createTerminal(command("s1", "echo", "late"))).getMessage());
+		assertEquals(2, display.consoles().size(), "and no console is opened for it");
+		assertEquals(List.of(other), service.activeIds());
+
+		// The same id again, as when a session is loaded once more.
+		service.admitSession("s1");
 		String next = create(command("s1", "echo", "again"));
 		waitForExit(next);
 		assertEquals("again", outputOf(next).strip());
 		assertEquals(3, display.consoles().size(), "a closed shared console is not used again");
+	}
+
+	/** Ending everything also forgets which sessions were closed: the next agent may use any id. */
+	@Test
+	void afterEverythingWasEndedAClosedSessionsIdIsFree() throws Exception {
+		service.disposeSession("s1");
+		service.disposeAll();
+
+		String next = create(command("s1", "echo", "again"));
+		waitForExit(next);
+		assertEquals("again", outputOf(next).strip());
+	}
+
+	/**
+	 * A display whose consoles are the recording ones but take until
+	 * {@code opened} to open, the way a busy UI thread makes them.
+	 */
+	private TerminalService slowToOpen(CountDownLatch opening, CountDownLatch opened) {
+		return new TerminalService(settings, new Fakes.FakeWorkspace(dir), (target, closedByUser) -> {
+			opening.countDown();
+			try {
+				opened.await(Fakes.SECONDS, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return display.open(target, closedByUser);
+		}, logger);
+	}
+
+	/** The session is closed while the console of its command is still opening: nothing starts, nothing stays. */
+	@Test
+	void aCommandAskedForBeforeItsSessionWasClosedIsNotStartedAndLeavesNoConsole() throws Exception {
+		for (TerminalMode mode : List.of(TerminalMode.SHARED, TerminalMode.PER_COMMAND, TerminalMode.HIDDEN)) {
+			settings.mode = mode;
+			int before = display.consoles().size();
+			CountDownLatch opening = new CountDownLatch(1);
+			CountDownLatch opened = new CountDownLatch(1);
+			TerminalService slow = slowToOpen(opening, opened);
+			try {
+				CompletableFuture<JsonNode> asked = slow.createTerminal(command("s1", announceAndSleep("never")));
+				if (mode != TerminalMode.HIDDEN) {
+					assertTrue(opening.await(Fakes.SECONDS, TimeUnit.SECONDS), mode + ": the console to be asked for");
+				}
+
+				slow.disposeSession("s1");
+				opened.countDown();
+
+				assertEquals("The session was closed before the command was started", failure(asked).getMessage(), mode.toString());
+				assertEquals(List.of(), slow.activeIds(), mode.toString());
+				List<RecordingConsole> consoles = display.consoles().subList(before, display.consoles().size());
+				for (RecordingConsole console : consoles) {
+					assertEquals("close", console.events().get(console.events().size() - 1), mode + ": " + console.events());
+				}
+				assertEquals(mode == TerminalMode.HIDDEN ? 0 : 1, consoles.size(), mode.toString());
+
+				// Another session is not held up, and gets a console of its own.
+				JsonNode next = get(slow.createTerminal(command("s2", "echo", "again")));
+				get(slow.waitForTerminalExit(id(next.path("terminalId").asText())));
+				if (mode == TerminalMode.SHARED) {
+					assertEquals("s2", display.consoles().get(display.consoles().size() - 1).target.sessionId());
+				}
+			} finally {
+				opened.countDown();
+				slow.close();
+			}
+		}
+	}
+
+	/** Everything is ended while a console is opening: the console that was opened for nothing is closed again. */
+	@Test
+	void aCommandRefusedAfterItsConsoleWasOpenedLeavesNoConsoleBehind() throws Exception {
+		for (TerminalMode mode : List.of(TerminalMode.SHARED, TerminalMode.PER_COMMAND)) {
+			settings.mode = mode;
+			int before = display.consoles().size();
+			CountDownLatch opening = new CountDownLatch(1);
+			CountDownLatch opened = new CountDownLatch(1);
+			TerminalService slow = slowToOpen(opening, opened);
+			try {
+				CompletableFuture<JsonNode> asked = slow.createTerminal(command("s1", announceAndSleep("never")));
+				assertTrue(opening.await(Fakes.SECONDS, TimeUnit.SECONDS), mode + ": the console to be asked for");
+
+				get(slow.killAll());
+				opened.countDown();
+
+				assertEquals("The agent's terminals were ended before the command was started", failure(asked).getMessage());
+				RecordingConsole console = display.consoles().get(before);
+				assertEquals("close", console.events().get(console.events().size() - 1), mode + ": " + console.events());
+
+				// The session goes on (the agent is gone, its sessions are not): its next command
+				// gets a console that works, not the closed one.
+				JsonNode next = get(slow.createTerminal(command("s1", "echo", "again")));
+				String nextId = next.path("terminalId").asText();
+				get(slow.waitForTerminalExit(id(nextId)));
+				assertEquals(before + 2, display.consoles().size(), mode.toString());
+				assertTrue(slow.showTerminal(nextId, "s1"), mode.toString());
+			} finally {
+				opened.countDown();
+				slow.close();
+			}
+		}
+	}
+
+	/** A shared console that was there before a refused command is the session's, not the command's: it stays. */
+	@Test
+	void aRefusedCommandDoesNotCloseAConsoleItDidNotOpen() throws Exception {
+		String earlier = create(command("s1", "echo", "earlier"));
+		waitForExit(earlier);
+		RecordingConsole console = display.only();
+		CountDownLatch hold = new CountDownLatch(1);
+		CountDownLatch held = new CountDownLatch(1);
+		// The starter thread is busy opening a console for another session.
+		Fakes.RecordingDisplay inner = display;
+		TerminalService slow = new TerminalService(settings, new Fakes.FakeWorkspace(dir), (target, closedByUser) -> {
+			if (target.sessionId().equals("s2")) {
+				held.countDown();
+				try {
+					hold.await(Fakes.SECONDS, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+			return inner.open(target, closedByUser);
+		}, logger);
+		try {
+			JsonNode first = get(slow.createTerminal(command("s1", "echo", "one")));
+			get(slow.waitForTerminalExit(id(first.path("terminalId").asText())));
+			RecordingConsole sessions = display.consoles().get(1);
+			CompletableFuture<JsonNode> blocker = slow.createTerminal(command("s2", "echo", "two"));
+			assertTrue(held.await(Fakes.SECONDS, TimeUnit.SECONDS));
+			CompletableFuture<JsonNode> queued = slow.createTerminal(command("s1", "echo", "three"));
+
+			get(slow.killAll());
+			hold.countDown();
+
+			failure(blocker);
+			failure(queued);
+			assertFalse(sessions.events().contains("close"), "the session's console was not the refused command's: " + sessions.events());
+			assertTrue(slow.showTerminal(first.path("terminalId").asText(), "s1"));
+		} finally {
+			hold.countDown();
+			slow.close();
+		}
+		assertFalse(console.events().contains("close"), "nor was the other service's console touched");
+	}
+
+	/** A per-command console outlives its session, and is told how the command ended so the display can count it as finished. */
+	@Test
+	void theConsoleOfACommandEndedWithItsSessionStillHearsOfTheEnd() throws Exception {
+		settings.mode = TerminalMode.PER_COMMAND;
+		String running = create(command("s1", announceAndSleep("started")));
+		String other = create(command("s2", announceAndSleep("other")));
+		awaitRunning(running);
+		awaitRunning(other);
+		RecordingConsole console = display.consoles().get(0);
+		RecordingConsole otherConsole = display.consoles().get(1);
+
+		service.disposeSession("s1");
+		display.await(() -> console.events().stream().anyMatch(event -> event.startsWith("exited " + running + " ")),
+				"the console to hear of the end");
+		assertFalse(console.events().contains("close"), "a per-command console stays open");
+
+		service.disposeAll();
+		display.await(() -> otherConsole.events().stream().anyMatch(event -> event.startsWith("exited " + other + " ")),
+				"the other console to hear of the end");
+		assertFalse(otherConsole.events().contains("close"));
+	}
+
+	/** Ending a session or everything does not wait for the processes: the caller may be the UI thread. */
+	@Test
+	void disposingReturnsBeforeTheProcessesAreEnded() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		String running = create(command("s1", announceAndSleep("started")));
+		awaitRunning(running);
+		Process shell = service.processOf(running);
+		// Keep both of the killer's ways busy is not possible from outside; what can be
+		// seen is the thread: the kill must not happen on the caller's.
+		Thread caller = Thread.currentThread();
+		List<Thread> killers = new CopyOnWriteArrayList<>();
+		shell.onExit().thenRun(release::countDown);
+		service.killObserver = () -> killers.add(Thread.currentThread());
+
+		service.disposeSession("s1");
+
+		assertTrue(release.await(Fakes.SECONDS, TimeUnit.SECONDS), "the command to end");
+		Fakes.await(() -> !killers.isEmpty(), "the kill to be seen");
+		assertFalse(killers.contains(caller), "killed on the caller's thread");
+
+		String again = create(command("s2", announceAndSleep("again")));
+		awaitRunning(again);
+		killers.clear();
+		service.disposeAll();
+		Fakes.await(() -> !killers.isEmpty(), "the second kill to be seen");
+		assertFalse(killers.contains(caller), "killed on the caller's thread");
 	}
 
 	@Test

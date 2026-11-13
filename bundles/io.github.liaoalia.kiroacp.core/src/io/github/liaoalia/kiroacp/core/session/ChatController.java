@@ -183,6 +183,8 @@ public final class ChatController implements AutoCloseable {
 				if (error != null) {
 					logger.warn("agent stop failed: " + Async.message(error));
 				}
+				// Until it was gone the agent could still ask for a command.
+				lifecycle.killTerminals("agent shutdown, after the stop");
 				return null;
 			});
 		});

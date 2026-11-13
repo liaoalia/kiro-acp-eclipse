@@ -180,6 +180,8 @@ final class SessionRoster {
 			}
 			ChatSession session = new ChatSession(state, ++sessionSeq, groupId, c.host.clock().getAsLong());
 			c.sessions.put(session.id(), session);
+			// In case the id is one that was closed before (a session loaded again).
+			c.terminal.admitSession(session.id());
 			c.logger.info("session " + session.id() + " opened (group " + groupId + ")");
 			c.listing.schedule();
 			c.hooks.each(listener -> listener.sessionOpened(session.id()));
@@ -307,8 +309,9 @@ final class SessionRoster {
 			c.permissions.clearPolicies(sessionId);
 			c.sessions.remove(sessionId, session);
 			c.kinds.forget(sessionId);
-			// Its commands end with it, whether a turn was running or not: once the session
-			// is gone nothing else would end them. Never a reason not to close.
+			// Its commands end with it, whether a turn was running or not, and none is started
+			// for it from here on (the agent may still ask: a cancel is only a request). Once
+			// the session is gone nothing else would end them. Never a reason not to close.
 			try {
 				c.terminal.disposeSession(sessionId);
 			} catch (RuntimeException e) {
