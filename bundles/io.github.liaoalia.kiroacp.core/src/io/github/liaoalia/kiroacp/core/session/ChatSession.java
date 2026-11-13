@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import io.github.liaoalia.kiroacp.core.acp.api.SessionState;
 import io.github.liaoalia.kiroacp.core.host.Subscription;
@@ -36,8 +37,14 @@ final class ChatSession {
 	boolean loading;
 	/** Tool calls replayed by {@code session/load}: their terminal ids are of an earlier run and never resolved against live terminals. */
 	final Set<String> replayedToolCalls = new HashSet<>();
-	/** The session is being closed: nothing may start another turn on it. */
+	/** The session is being closed or replaced: nothing may start another turn on it. */
 	boolean closing;
+	/**
+	 * While the session is being replaced (reference D22, {@code /clear}):
+	 * completes with the id of the session that took its place, {@code null}
+	 * when none could. A prompt typed meanwhile waits for it and goes there.
+	 */
+	CompletableFuture<String> replacement;
 	/** Bumped whenever a turn starts or ends, so a late answer can tell it is late. */
 	int turnGeneration;
 	/** Armed by Stop: ends the turn here when the agent never answers {@code session/cancel} (reference D27). */
