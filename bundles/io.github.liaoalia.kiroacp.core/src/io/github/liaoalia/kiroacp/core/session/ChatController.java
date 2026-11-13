@@ -121,6 +121,11 @@ public final class ChatController implements AutoCloseable {
 		return hooks;
 	}
 
+	/** What the IDE gave the controller: the features use the same workspace, settings, scheduler and log. */
+	public ChatHost host() {
+		return host;
+	}
+
 	/** The permission registry; a feature that resolves requests itself (diff review, plan approval) uses it. */
 	public PermissionManager permissions() {
 		return permissions;
@@ -219,6 +224,21 @@ public final class ChatController implements AutoCloseable {
 	 */
 	public CompletableFuture<Void> closeSession(String sessionId) {
 		return async.call(() -> roster.doCloseSession(sessionId));
+	}
+
+	/**
+	 * Restore a session the agent kept from an earlier run ({@code session/load},
+	 * reference D21) into a fresh session of the page's group (default: the
+	 * focused page's, else {@value #DEFAULT_GROUP}), display and focus it. The
+	 * history the agent replays builds its transcript as live updates do. An
+	 * id that is live already is only selected.
+	 *
+	 * @param title the agent's title of the session ({@code session/list}), or {@code null} when unknown
+	 * @return the session's id, or {@code null} when it could not be restored: the page then shows
+	 *         what it showed before and a notice says why
+	 */
+	public CompletableFuture<String> openPastSession(String sessionId, String title, PageHandle page) {
+		return async.call(() -> roster.doOpenPastSession(sessionId, title, binding(page)));
 	}
 
 	/** Close every session of a group: its page was closed (reference D20). */
