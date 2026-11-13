@@ -17,6 +17,7 @@ Require-Bundle: org.eclipse.ui,
  org.eclipse.ui.ide,
  org.eclipse.ui.workbench.texteditor,
  org.eclipse.jface.text,
+ org.eclipse.compare,
  io.github.liaoalia.kiroacp.core
 Import-Package: com.fasterxml.jackson.core;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.databind;version="[2.17.0,3.0.0)",

@@ -268,6 +268,7 @@ final class Hosts {
 	static final class FakeSettings implements Settings {
 		volatile TerminalMode mode = TerminalMode.SHARED;
 		volatile boolean showSettings;
+		volatile AutoOpenDiffs autoOpenDiffs = AutoOpenDiffs.NEVER;
 
 		@Override
 		public String cliPath() {
@@ -296,7 +297,7 @@ final class Hosts {
 
 		@Override
 		public AutoOpenDiffs autoOpenDiffs() {
-			return AutoOpenDiffs.NEVER;
+			return autoOpenDiffs;
 		}
 
 		@Override
