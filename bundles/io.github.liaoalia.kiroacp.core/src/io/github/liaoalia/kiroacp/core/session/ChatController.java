@@ -18,6 +18,8 @@ import io.github.liaoalia.kiroacp.core.host.Subscription;
 import io.github.liaoalia.kiroacp.core.model.CommandView;
 import io.github.liaoalia.kiroacp.core.model.ConnectionStatus;
 import io.github.liaoalia.kiroacp.core.model.ConnectionView;
+import io.github.liaoalia.kiroacp.core.model.ContextChip;
+import io.github.liaoalia.kiroacp.core.model.ImageAttachment;
 import io.github.liaoalia.kiroacp.core.model.DeliveryState;
 import io.github.liaoalia.kiroacp.core.model.FromWebview;
 import io.github.liaoalia.kiroacp.core.model.NoticeView;
@@ -254,6 +256,50 @@ public final class ChatController implements AutoCloseable {
 	 */
 	public CompletableFuture<Void> prompt(String text, String sessionId, PageHandle page) {
 		return async.call(() -> turns.prompt(text, List.of(), sessionId, binding(page), List.of()));
+	}
+
+	/**
+	 * {@link #prompt(String, String, PageHandle)} with chips and images: what a
+	 * feature sends on behalf of the user (the text of {@code /plan}). It
+	 * passes the prompt interceptors like any other prompt.
+	 */
+	public CompletableFuture<Void> prompt(String text, List<ContextChip> chips, List<ImageAttachment> images, String sessionId,
+			PageHandle page) {
+		return async.call(() -> turns.prompt(text, chips, sessionId, binding(page), images));
+	}
+
+	/**
+	 * {@code /clear} (reference D18, D22): a new session takes the place of
+	 * {@code sessionId} in the page that displays it ({@code page} when it
+	 * does, else the focused page, else any), then the old one is closed as
+	 * {@link #closeSession} closes it. Its running turn is cancelled first, and
+	 * a prompt sent to it meanwhile goes to the new session.
+	 *
+	 * @return the new session's id, or {@code null} when none could be created: the old session then stays
+	 */
+	public CompletableFuture<String> replaceSession(String sessionId, PageHandle page) {
+		return async.call(() -> roster.doReplaceSession(sessionId, binding(page)));
+	}
+
+	/**
+	 * The page a command about a session acts in: {@code preferred} when it
+	 * displays the session, else the focused page when it does, else any page
+	 * that does, else {@code null}. Controller thread.
+	 */
+	public PageHandle pageDisplaying(String sessionId, PageHandle preferred) {
+		return roster.pageDisplaying(sessionId, binding(preferred));
+	}
+
+	/**
+	 * The user chose a mode, a config option value or a model by other means
+	 * than the page's controls (a slash command) and the agent accepted it:
+	 * the listeners hear of it as of a choice made in the page. Controller thread.
+	 *
+	 * @param value the option's new value; {@code null} for a mode or a model, whose value is its id
+	 */
+	public void optionChosen(String sessionId, ChatHooks.Option option, String id, JsonNode value) {
+		JsonNode chosen = value != null ? value : com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.textNode(id);
+		hooks.each(listener -> listener.optionChosen(sessionId, option, id, chosen));
 	}
 
 	/** Stop the running turn of {@code sessionId}; {@code null} means the focused session. */

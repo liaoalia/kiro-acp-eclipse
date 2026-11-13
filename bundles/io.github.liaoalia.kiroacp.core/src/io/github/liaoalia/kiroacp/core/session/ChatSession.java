@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import io.github.liaoalia.kiroacp.core.acp.api.SessionState;
 import io.github.liaoalia.kiroacp.core.host.Subscription;
@@ -38,6 +39,8 @@ final class ChatSession {
 	final Set<String> replayedToolCalls = new HashSet<>();
 	/** The session is being closed: nothing may start another turn on it. */
 	boolean closing;
+	/** While {@code /clear} replaces the session: the id of the session that takes its place, {@code null} when that failed. */
+	CompletableFuture<String> replacement;
 	/** Bumped whenever a turn starts or ends, so a late answer can tell it is late. */
 	int turnGeneration;
 	/** Armed by Stop: ends the turn here when the agent never answers {@code session/cancel} (reference D27). */

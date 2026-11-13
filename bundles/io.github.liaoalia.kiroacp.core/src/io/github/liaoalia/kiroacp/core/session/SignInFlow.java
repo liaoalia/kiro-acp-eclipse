@@ -30,6 +30,11 @@ public final class SignInFlow {
 		return controller.hooks().onMessage(FromWebview.Login.class, (message, page) -> flow.signIn(message.methodId()));
 	}
 
+	/** Sign in as the page's button does, for whoever else offers it ({@code /login}). */
+	public static void signIn(ChatController controller, String methodId) {
+		new SignInFlow(controller).signIn(methodId);
+	}
+
 	/** @param methodId the method the user chose, or {@code null} for the agent's terminal method */
 	void signIn(String methodId) {
 		controller.start().whenComplete((started, startError) -> {

@@ -76,9 +76,21 @@ final class Turns {
 		}
 		ChatSession target = session;
 		if (target.closing) {
-			// Seam (reference D22): `/clear` would hand the prompt on to the session replacing this one.
-			c.tell(target, Severity.WARNING, "The session is closing; send the message again in a new one.");
-			return Async.done(null);
+			// `/clear` is replacing this session: the message was typed for the replacement, so it
+			// waits for it and goes there. Nothing may be sent to a closing session (reference D22).
+			CompletableFuture<String> replacement = target.replacement;
+			if (replacement == null) {
+				c.tell(target, Severity.WARNING, "The session is closing; send the message again in a new one.");
+				return Async.done(null);
+			}
+			return c.async.ui(replacement).thenCompose(replacedBy -> {
+				if (replacedBy == null) {
+					c.tell(c.sessions.get(target.id()) == target ? target : null, Severity.WARNING,
+							"The session is closing; send the message again in a new one.");
+					return Async.<Void>done(null);
+				}
+				return send(text, chips, replacedBy, page, images);
+			});
 		}
 		c.focus(target.id());
 		if (target.loading) {

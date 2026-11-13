@@ -415,6 +415,57 @@ final class SessionRoster {
 		return Async.done(null);
 	}
 
+	/** The page a command about {@code sessionId} acts in: {@code given}, else the focused page, else any, that displays it. */
+	PageBinding pageDisplaying(String sessionId, PageBinding given) {
+		if (sessionId == null) {
+			return null;
+		}
+		if (given != null && sessionId.equals(given.displayed)) {
+			return given;
+		}
+		if (c.focusedPage != null && sessionId.equals(c.focusedPage.displayed)) {
+			return c.focusedPage;
+		}
+		return c.pages.stream().filter(page -> sessionId.equals(page.displayed)).findFirst().orElse(null);
+	}
+
+	/**
+	 * {@code /clear} (reference D18, D22): a new session takes the place of
+	 * {@code sessionId} in the page that displays it, and the old one is
+	 * closed. From the first moment nothing may start another turn on the old
+	 * session; its running turn is cancelled first. A prompt sent to it
+	 * meanwhile waits for the replacement and goes there ({@link Turns}).
+	 *
+	 * @return the new session's id, or {@code null} when none could be created: the session then stays usable
+	 */
+	CompletableFuture<String> doReplaceSession(String sessionId, PageBinding given) {
+		ChatSession session = sessionId != null ? c.sessions.get(sessionId) : null;
+		if (session == null || session.closing) {
+			return Async.done(null);
+		}
+		PageBinding page = pageDisplaying(sessionId, given);
+		session.closing = true;
+		CompletableFuture<Void> cancelled = session.turnActive ? c.turns.cancel(sessionId) : Async.done(null);
+		CompletableFuture<String> replacement = cancelled.thenCompose(done -> doNewSession(page)).thenCompose(created -> {
+			if (created != null && !created.equals(sessionId)) {
+				return doCloseSession(sessionId).thenApply(closed -> created);
+			}
+			return Async.<String>done(null);
+		}).handle((created, error) -> {
+			session.replacement = null;
+			if (created == null) {
+				// The replacement failed: the session stays usable.
+				session.closing = false;
+			}
+			if (error != null) {
+				c.logger.warn("session " + sessionId + " could not be replaced: " + Async.message(error));
+			}
+			return created;
+		});
+		session.replacement = replacement.isDone() ? null : replacement;
+		return replacement;
+	}
+
 	CompletableFuture<Void> doCloseSession(String sessionId) {
 		ChatSession session = sessionId != null ? c.sessions.get(sessionId) : null;
 		if (session == null) {

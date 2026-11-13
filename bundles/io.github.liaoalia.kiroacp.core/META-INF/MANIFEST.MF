@@ -23,7 +23,12 @@ Export-Package: io.github.liaoalia.kiroacp.core.acp,
  io.github.liaoalia.kiroacp.core.session,
  io.github.liaoalia.kiroacp.core.session.history,
  io.github.liaoalia.kiroacp.core.session.diff,
- io.github.liaoalia.kiroacp.core.session.context
+ io.github.liaoalia.kiroacp.core.session.context,
+ io.github.liaoalia.kiroacp.core.pure.slash,
+ io.github.liaoalia.kiroacp.core.pure.usage,
+ io.github.liaoalia.kiroacp.core.pure.plan,
+ io.github.liaoalia.kiroacp.core.session.commands,
+ io.github.liaoalia.kiroacp.core.session.plan
 Import-Package: com.fasterxml.jackson.annotation;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.core;version="[2.17.0,3.0.0)",
  com.fasterxml.jackson.databind;version="[2.17.0,3.0.0)",
