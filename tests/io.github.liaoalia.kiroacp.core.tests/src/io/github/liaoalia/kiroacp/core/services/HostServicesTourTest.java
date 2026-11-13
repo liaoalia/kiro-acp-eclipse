@@ -2,6 +2,7 @@ package io.github.liaoalia.kiroacp.core.services;
 
 import static io.github.liaoalia.kiroacp.core.services.Fakes.get;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,6 +27,7 @@ import io.github.liaoalia.kiroacp.core.acp.api.KiroAgent;
 import io.github.liaoalia.kiroacp.core.acp.api.SessionEvent;
 import io.github.liaoalia.kiroacp.core.acp.api.SessionState;
 import io.github.liaoalia.kiroacp.core.acp.impl.KiroAgents;
+import io.github.liaoalia.kiroacp.core.host.Settings.TerminalMode;
 import io.github.liaoalia.kiroacp.core.model.PermissionView;
 import io.github.liaoalia.kiroacp.core.model.ToolKind;
 import io.github.liaoalia.kiroacp.core.pure.output.TerminalPresentation;
@@ -130,6 +132,64 @@ class HostServicesTourTest {
 			assertEquals(0, snapshot.exitCode());
 			assertNull(terminal.snapshot(terminalId, "some-other-session"));
 			assertTrue(terminal.showTerminal(terminalId, sessionId));
+		} finally {
+			get(agent.stop());
+			services.close();
+			terminal.close();
+			fs.close();
+			permissions.close();
+		}
+	}
+
+	/** Reference F6.2: with {@code terminal.mode} hidden no console is opened, and the card still gets the output. */
+	@Test
+	void inHiddenModeTheToursCommandOpensNoConsoleAndItsOutputIsStillKept() throws Exception {
+		Files.write(dir.resolve("README.md"), "# Tour\n".getBytes(StandardCharsets.UTF_8));
+		Fakes.RecordingLogger logger = new Fakes.RecordingLogger();
+		Fakes.FakeWorkspace workspace = new Fakes.FakeWorkspace(dir);
+		Fakes.RecordingDisplay display = new Fakes.RecordingDisplay();
+		Fakes.FakeSettings settings = new Fakes.FakeSettings();
+		settings.mode = TerminalMode.HIDDEN;
+		List<String> terminalIds = new CopyOnWriteArrayList<>();
+
+		PermissionManager permissions = new PermissionManager((sessionId, toolCallId) -> ToolKind.EDIT, logger);
+		permissions.onDidChange(() -> {
+			for (PermissionView view : permissions.pending()) {
+				permissions.decideRequest(view.requestId(), PolicyDecision.ALLOW);
+			}
+		});
+		FsService fs = new FsService(workspace, new DiskTextFiles(), logger);
+		TerminalService terminal = new TerminalService(settings, workspace, display, logger);
+		HostServices services = new HostServices(permissions, fs, terminal, null, logger);
+		String script = FakeAgent.fixtures().resolve("fake-agent").resolve("agent.mjs").toString();
+		KiroAgent agent = KiroAgents.create(new AgentProcessOptions("node", List.of(script, "acp", "--scenario", "tour"), dir,
+				System.getenv(), logger, "0.1.0-test"), services);
+		agent.onSessionEvent(event -> {
+			if (event instanceof SessionEvent.Update update) {
+				// The tool card's content names the terminal the agent created for it.
+				for (JsonNode id : update.update().findValues("terminalId")) {
+					if (!terminalIds.contains(id.asText())) {
+						terminalIds.add(id.asText());
+					}
+				}
+			}
+		});
+		try {
+			get(agent.start());
+			String sessionId = get(agent.newSession(dir, List.of(), null)).sessionId();
+
+			JsonNode response = get(agent.prompt(sessionId,
+					List.of(Fakes.MAPPER.createObjectNode().put("type", "text").put("text", "tour"))));
+
+			assertEquals("end_turn", response.path("stopReason").asText(), logger.lines.toString());
+			assertEquals("hello from kiro\n", new String(Files.readAllBytes(dir.resolve("hello.txt")), StandardCharsets.UTF_8));
+			assertEquals(List.of(), display.consoles(), "no console in hidden mode");
+			assertTrue(terminal.activeIds().isEmpty(), "the agent released its terminal");
+			assertEquals(1, terminalIds.size(), terminalIds.toString());
+			TerminalSnapshot snapshot = terminal.snapshot(terminalIds.get(0), sessionId);
+			assertTrue(snapshot.output().contains("hello"), snapshot.toString());
+			assertEquals(0, snapshot.exitCode());
+			assertFalse(terminal.showTerminal(terminalIds.get(0), sessionId), "there is no console to show");
 		} finally {
 			get(agent.stop());
 			services.close();
