@@ -110,7 +110,11 @@ final class AgentLifecycle {
 		Settings settings = c.host.settings();
 		String command = settings.cliPath();
 		List<String> configured = settings.cliArgs();
-		List<String> args = configured == null || configured.isEmpty() ? List.of("acp") : List.copyOf(configured);
+		// As in the reference: the setting holds extra arguments, `acp` always comes first.
+		List<String> args = new ArrayList<>(List.of("acp"));
+		if (configured != null) {
+			args.addAll(configured);
+		}
 		Path cwd = c.host.workspace().defaultCwd();
 		c.logger.info("spawning: " + command + " " + String.join(" ", args) + " (cwd " + cwd + ")");
 		KiroAgent next = agents.create(

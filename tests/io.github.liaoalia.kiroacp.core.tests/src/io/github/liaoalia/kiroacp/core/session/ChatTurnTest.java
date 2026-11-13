@@ -45,6 +45,24 @@ class ChatTurnTest {
 	Path dir;
 
 	@Test
+	void theExtraArgumentsOfTheSettingFollowAcpAndThePickerSettingsReachThePage() throws Exception {
+		try (Harness h = Harness.launch(dir)) {
+			// Reference: `args = ["acp", ...cliArgs]`; F8.3: the snapshot carries the two settings of the page.
+			h.settings.cliArgs = List.of("--agent-engine=v3", "--agent", "my agent");
+			h.settings.showSettings = true;
+			h.settings.sessionPanelCollapsed = true;
+			Client view = h.openView("view");
+
+			assertEquals(1, h.launches.size());
+			assertEquals(List.of("acp", "--agent-engine=v3", "--agent", "my agent"), h.launches.get(0).args());
+			assertTrue(h.logger.has("spawning: kiro-cli acp --agent-engine=v3 --agent my agent (cwd "), h.logger.lines.toString());
+			assertEquals(Harness.json("{\"showSettings\":true,\"sessionPanelCollapsed\":true}"), view.snapshot().get("prefs"));
+			assertEquals(Harness.json("{\"showSettings\":true,\"sessionPanelCollapsed\":true}"),
+					view.page.jsonSince(0).get(0).at("/state/prefs"), "also the state a page gets for ready");
+		}
+	}
+
+	@Test
 	void aPageThatSaysReadyGetsItsStateThenTheAgentAndASession() throws Exception {
 		try (Harness h = Harness.launch(dir)) {
 			Client view = h.attach("view", AttachOptions.ownGroup("view-1"));
