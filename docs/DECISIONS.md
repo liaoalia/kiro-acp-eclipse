@@ -79,3 +79,23 @@ Mode, model and config options chosen by the user are stored per workspace (`Ins
 
 Past sessions are chosen in a modal dialog with a filter box (every typed word must occur in the title, time or folder) instead of VS Code's quick pick.
 
+## D11. Nothing is sent to a session that is closing or being replaced (2026-11-13)
+
+A prompt typed during a turn is steered (`_session/steer`) without asking whether the agent advertises it; any refusal marks the session as unable to steer and the prompt is queued. The queue drains one prompt per turn after any stop reason, and is dropped with a notice when the turn ends in an error, the agent goes away, or the session is closed or replaced.
+
+`/clear` replaces a session through `ChatController.replaceSession`: the old one is marked closing, the new one is created, then the old one is closed. That nothing reaches the old session meanwhile is enforced in three places: `Turns.send` waits for the replacement, `Turns.dispatch` checks again after the prompt's files were read, and `Steering` checks before it queues, drains or handles a refusal.
+
+## D12. Sign-in runs in an external terminal window (2026-11-13)
+
+On every platform. TM Terminal is not in the target platform and many installs lack it, and its exit code would have to be read through optional API; the generated script with a status file works everywhere. Nothing of the Eclipse process environment is written into the script; a script that has to set variables of the agent's auth method deletes its own file as its first command.
+
+After the sign-in restart the sessions that had a conversation are loaded back into their views, the focused one first. Which views were closed is remembered per restore, not for ever as in the reference: an Eclipse view keeps its id when it is closed and opened again.
+
+## D13. Slash commands are prompt interceptors; the plan is a document per session (2026-11-13)
+
+Client-side commands are handled by a prompt interceptor installed after the one that checks a prompt's images, which is the reference's order; `KiroChat.install` is the one place that fixes the order, and a test runs it. An interceptor sees a prompt before the steering does, so a command typed during a turn runs at once.
+
+The plan is shown as plain Markdown text in a read-only editor of its own, one per session, refreshed as the agent revises it; Approve and Reject for a `switch_mode` request are buttons inside that editor. The reference has one document that follows the focused session.
+
+A usage poll (`_kiro/session/context`) the agent rejects is not repeated for that agent process.
+

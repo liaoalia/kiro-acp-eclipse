@@ -48,7 +48,8 @@ import io.github.liaoalia.kiroacp.core.session.steering.Steering;
  * level of the page protocol. The fake agent's {@code slow} turn streams for
  * two seconds, {@code slow-steer} refuses to steer only after 1.5 s.
  *
- * <p>{@code /clear} is not a command here yet: F12.6 and F12.7 replace the
+ * <p>Without the slash commands installed ({@code ChatSlashTest} has the same
+ * cases through {@code /clear}): F12.6 and F12.7 replace the
  * session through {@link ChatController#replaceSession}, which is what the
  * command does. F12.4 ({@code /cancel} during a turn) belongs to the slash
  * commands; F12.8 to F12.10 are in {@link ChatStopTest}.

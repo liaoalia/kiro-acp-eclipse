@@ -180,6 +180,8 @@ Owns: `core/.../session/`, `ui/.../chat/ChatView.java`, `ui/.../chat/KiroChat.ja
 - [x] ➕ review of Tasks 2-10 (revmux task `since-e740fa1`, 2026-11-13): round 02 found the agent's commands outliving their session or agent, a project selected in a view losing to the open editor, and a permission card that could overtake its tool call; round 03 found, in those fixes, a command still starting for a closed session and processes ended on the display thread; round 04 (`final`) came back clean. The codex agent did real work in round 03 only. Released as 0.1.2
 
 ### Wave 3 (parallel): parity features
+⚠️ Everything of this wave that needs a workbench (compare editor, plan editor, dialogs, commands, key binding, menus) has been built and compiled but never seen in a running Eclipse; see the ⚠️ line of each task.
+
 Each task owns one package in `core` and one in `ui`, handles its own `FromWebview` messages in a separate handler class registered with the controller, and is merged one at a time.
 
 ### Task 11: Diff review in the Compare editor
@@ -216,23 +218,30 @@ Owns: `core/.../session/history/`, `ui/.../sessions/`. Reference: D19–D21, D24
 
 ### Task 14: Steering and queued prompts
 Owns: `core/.../session/steering/`. Reference: D22, `f12-steering` e2e.
-- [ ] a prompt during a turn is steered when the agent advertises it, else queued; `messageDelivery` updates
-- [ ] tests with the `slow-steer` and `slow` recordings
-- [ ] run the validation commands
+- [x] a prompt during a turn is steered when the agent advertises it, else queued; `messageDelivery` updates
+- [x] tests with the `slow-steer` and `slow` recordings
+- [x] run the validation commands
+- ➕ steering is tried without asking whether the agent advertises it, and any refusal falls back to the queue, as the reference does (Kiro does not advertise the method)
+- ⚠️ unverified with a real `kiro-cli`; by the reference's notes the real CLI refuses `_session/steer`, so prompts typed during a turn will be queued
 
 ### Task 15: Sign-in flow
 Owns: `core/.../session/auth/`, `ui/.../auth/`. Reference: D25, `src/features/services.ts`, `f14-login` e2e.
-- [ ] sign-in offered from any "not logged in" failure; signed out means `logout` then one fresh terminal sign-in, never a token refresh
-- [ ] `login` runs the CLI in a terminal the user can type into (TM Terminal if installed, otherwise an external terminal window); `_kiro/openExternalUrl` opens the system browser after confirming the host
-- [ ] tests with the fake agent's `--auth-required`
+- [x] sign-in offered from any "not logged in" failure; signed out means `logout` then one fresh terminal sign-in, never a token refresh
+- [x] `login` runs the CLI in a terminal the user can type into (TM Terminal if installed, otherwise an external terminal window); `_kiro/openExternalUrl` opens the system browser after confirming the host
+- [x] tests with the fake agent's `--auth-required`
 - [x] ➕ done ahead of the rest (0.1.0): the page's sign-in button runs the agent's terminal method in a system terminal window and restarts the agent afterwards (`core/session/SignInFlow`, `ui/services/SignInTerminal`), with `SignInFlowTest` and `SignInTerminalTest`; a URL the agent asks to open goes to the system browser after a confirmation
-- [ ] run the validation commands
+- [x] run the validation commands
+- ➕ the sign-in terminal is an external terminal window on every platform; TM Terminal is not used (not in the target platform, absent from many installs)
+- ➕ after the sign-in restart the sessions with a conversation are loaded back into their views; "Log In to Kiro" command
+- ⚠️ executed by no test: `ui/auth/SignInHandler`; starting a terminal window; anything on Linux or macOS (the list of Linux terminal programs is from memory)
 
 ### Task 16: Slash commands, usage and plan document
 Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui/.../plan/`. Reference: D11, D18, D26.
-- [ ] client-side slash command routing; `usage` messages; both with the reference test cases
-- [ ] `openPlan`: the plan as markdown in a read-only editor that updates live; Approve/Reject for `switch_mode` requests
-- [ ] run the validation commands
+- [x] client-side slash command routing; `usage` messages; both with the reference test cases
+- [x] `openPlan`: the plan as markdown in a read-only editor that updates live; Approve/Reject for `switch_mode` requests
+- [x] run the validation commands
+- ⚠️ executed by no test: `ui/plan/PlanEditor` as an editor part, the workbench paths of `EditorPlanDocuments`, `PlanCommandHandler`; the panel inside the editor is tested in a shell that is never opened
+- ➕ the plan is plain Markdown text in a read-only editor of its own (Eclipse has no Markdown editor to rely on), one document per session; Approve and Reject are buttons inside the editor
 
 ### Wave 4 (serial): finish
 
