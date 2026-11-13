@@ -71,7 +71,7 @@ final class PageMessages {
 		} else if (message instanceof FromWebview.CloseSession m) {
 			return c.roster.doCloseSession(m.sessionId());
 		} else if (message instanceof FromWebview.Restart) {
-			return c.lifecycle.doRestart();
+			return c.lifecycle.doRestart(false);
 		} else if (message instanceof FromWebview.PermissionResponse m) {
 			try {
 				c.permissions.resolve(m.requestId(), m.optionId());

@@ -301,7 +301,8 @@ final class SessionRoster {
 						"Cannot restore a session: the agent is not running.");
 				return Async.<String>done(null);
 			}
-			return loadInto(agent, sessionId, groupFor(page), page, agentTitle, previous).thenCompose(failure -> {
+			return loadInto(agent, sessionId, groupFor(page), page != null ? List.of(page) : List.of(), true, agentTitle, null,
+					previous).thenCompose(failure -> {
 				if (failure == null) {
 					ChatSession loaded = c.sessions.get(sessionId);
 					if (loaded == null || page == null) {
@@ -333,15 +334,17 @@ final class SessionRoster {
 
 	/**
 	 * {@code session/load} into a fresh session of {@code groupId}, displayed
-	 * by {@code page} and focused while the agent replays its history
-	 * ({@code loadInto} of the reference).
+	 * by {@code pages} (and focused with {@code focus}) while the agent replays
+	 * its history ({@code loadInto} of the reference).
 	 *
-	 * @param fallback what the pages showing the session go back to when the load fails
-	 * @return {@code null} once the session is restored, else why it is not: it is then forgotten
-	 *         again, and the focus is the caller's to mend
+	 * @param updatedAt when the session was last used, for one that comes back to its place in the
+	 *                  list; {@code null}: now
+	 * @param fallback  what the pages showing the session go back to when the load fails
+	 * @return {@code null} once the session is restored, else why it is not (empty when it was
+	 *         closed meanwhile): it is then forgotten again, and the focus is the caller's to mend
 	 */
-	private CompletableFuture<String> loadInto(KiroAgent agent, String sessionId, String groupId, PageBinding page,
-			String agentTitle, String fallback) {
+	CompletableFuture<String> loadInto(KiroAgent agent, String sessionId, String groupId, List<PageBinding> pages,
+			boolean focus, String agentTitle, Long updatedAt, String fallback) {
 		Path cwd = c.host.workspace().defaultCwd();
 		SessionState placeholder = new SessionState(sessionId, cwd.toString(), null, null, null, List.of(), null);
 		ChatSession session = new ChatSession(placeholder, ++sessionSeq, groupId, c.host.clock().getAsLong());
@@ -353,10 +356,14 @@ final class SessionRoster {
 		c.logger.info("session " + sessionId + " restoring (group " + groupId + ")");
 		c.listing.schedule();
 		c.hooks.each(listener -> listener.sessionOpened(sessionId));
-		if (page != null && c.pages.contains(page)) {
-			c.setPageSession(page, sessionId);
+		for (PageBinding page : pages) {
+			if (c.pages.contains(page)) {
+				c.setPageSession(page, sessionId);
+			}
 		}
-		c.focus(sessionId);
+		if (focus) {
+			c.focus(sessionId);
+		}
 		String restoring = c.tell(session, Severity.INFO, "Restoring session…").id();
 		return c.async.ui(agent.loadSession(sessionId, cwd, List.of())).handle((state, error) -> {
 			// Only this very object: the id may have been closed, or closed and restored again, meanwhile.
@@ -392,8 +399,13 @@ final class SessionRoster {
 			}
 			// The agent already reported this state as an event; merging it again does no harm.
 			c.events.applySessionState(session, state);
-			// The replay touched it; a session that comes back is the most recent one.
-			c.touch(session);
+			// The replay touched it. A session opened from the past is the most recent one; one
+			// that comes back after a sign-in keeps its place in the list.
+			if (updatedAt == null) {
+				c.touch(session);
+			} else {
+				session.updatedAt = updatedAt;
+			}
 			c.clearNotice(sessionId, restoring);
 			for (PageBinding shown : List.copyOf(c.pages)) {
 				if (sessionId.equals(shown.displayed)) {

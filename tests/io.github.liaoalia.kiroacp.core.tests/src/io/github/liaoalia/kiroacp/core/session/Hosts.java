@@ -428,9 +428,13 @@ final class Hosts {
 		}
 	}
 
-	/** Opens every URL without asking. */
+	/** Opens every URL without asking; a sign-in "terminal" is only written down and ends at once. */
 	static final class OpenEverything implements ExternalActions {
 		final List<String> urls = new CopyOnWriteArrayList<>();
+		/** The sign-ins asked for; no terminal and no CLI is ever started for one. */
+		final List<SignIn> signIns = new CopyOnWriteArrayList<>();
+		/** What the sign-in command "exits" with. */
+		volatile Integer signInExit = 0;
 
 		@Override
 		public CompletionStage<OpenResult> confirmAndOpenUrl(String host, String url) {
@@ -440,7 +444,8 @@ final class Hosts {
 
 		@Override
 		public CompletionStage<Integer> runSignIn(SignIn signIn) {
-			return CompletableFuture.completedFuture(0);
+			signIns.add(signIn);
+			return CompletableFuture.completedFuture(signInExit);
 		}
 	}
 

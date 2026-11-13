@@ -55,6 +55,7 @@
       <command id="io.github.liaoalia.kiroacp.command.newSession" name="New Kiro Session" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.cancelTurn" name="Cancel Kiro Turn" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.restartAgent" name="Restart Kiro Agent Process" categoryId="io.github.liaoalia.kiroacp.commands"/>
+      <command id="io.github.liaoalia.kiroacp.command.login" name="Log In to Kiro" description="Sign in with the Kiro CLI in a terminal window, then reconnect the chat and bring its sessions back" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.showLog" name="Show Kiro Protocol Log" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.forgetSessionOptions" name="Forget Remembered Kiro Session Options" categoryId="io.github.liaoalia.kiroacp.commands"/>
       <command id="io.github.liaoalia.kiroacp.command.sendSelection" name="Send Selection to Kiro Chat" description="Attach the selected lines of the active editor to the next message of the Kiro chat" categoryId="io.github.liaoalia.kiroacp.commands"/>
@@ -64,6 +65,7 @@
       <handler commandId="io.github.liaoalia.kiroacp.command.newSession" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.cancelTurn" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.restartAgent" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
+      <handler commandId="io.github.liaoalia.kiroacp.command.login" class="io.github.liaoalia.kiroacp.ui.auth.SignInHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.showLog" class="io.github.liaoalia.kiroacp.ui.handlers.ChatCommandHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.forgetSessionOptions" class="io.github.liaoalia.kiroacp.ui.sessions.ForgetSessionOptionsHandler"/>
       <handler commandId="io.github.liaoalia.kiroacp.command.sendSelection" class="io.github.liaoalia.kiroacp.ui.context.SendSelectionHandler"/>
@@ -75,6 +77,7 @@
       <menuContribution locationURI="menu:io.github.liaoalia.kiroacp.chat">
          <command commandId="io.github.liaoalia.kiroacp.command.cancelTurn" label="Cancel Current Turn" style="push"/>
          <command commandId="io.github.liaoalia.kiroacp.command.restartAgent" label="Restart Agent Process" style="push"/>
+         <command commandId="io.github.liaoalia.kiroacp.command.login" label="Log In to Kiro" style="push"/>
          <command commandId="io.github.liaoalia.kiroacp.command.showLog" label="Show Protocol Log" style="push"/>
          <command commandId="io.github.liaoalia.kiroacp.command.forgetSessionOptions" label="Forget Remembered Session Options" style="push"/>
       </menuContribution>
