@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Kiro ACP Chat UI tests
 Bundle-SymbolicName: io.github.liaoalia.kiroacp.ui.tests
-Bundle-Version: 0.1.2.qualifier
+Bundle-Version: 0.2.0.qualifier
 Bundle-Vendor: liaoalia
 Fragment-Host: io.github.liaoalia.kiroacp.ui
 Bundle-RequiredExecutionEnvironment: JavaSE-17

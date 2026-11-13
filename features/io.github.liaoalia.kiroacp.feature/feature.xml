@@ -2,7 +2,7 @@
 <feature
       id="io.github.liaoalia.kiroacp.feature"
       label="Kiro ACP Chat"
-      version="0.1.2.qualifier"
+      version="0.2.0.qualifier"
       provider-name="liaoalia">
    <description>
       Chat with the Kiro agent inside Eclipse over the Agent Client Protocol (ACP).

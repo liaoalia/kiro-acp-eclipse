@@ -243,6 +243,8 @@ Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui
 - ⚠️ executed by no test: `ui/plan/PlanEditor` as an editor part, the workbench paths of `EditorPlanDocuments`, `PlanCommandHandler`; the panel inside the editor is tested in a shell that is never opened
 - ➕ the plan is plain Markdown text in a read-only editor of its own (Eclipse has no Markdown editor to rely on), one document per session; Approve and Reject are buttons inside the editor
 
+- [x] ➕ review of the wave (revmux task `since-e740fa1`, 2026-11-13): round 05 (all four agents at work; it ended with exit 2 on an archive file name too long for Windows, its findings were read from the round's `stages/3-verified.json`) found nothing gating and three minors: an accepted edit of a proposal that could be applied to a later write, the file search entering NTFS junctions, a stale comment; fixed together with the plan editor's buttons answering whatever request was pending at the click. Round 06 (`final`) came back clean, with a hollow codex pass. Released as 0.2.0
+
 ### Wave 4 (serial): finish
 
 ### Task 17: Verify acceptance criteria

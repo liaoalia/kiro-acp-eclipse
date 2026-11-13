@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?pde version="3.5"?>
 <!-- Development product: the Eclipse Platform IDE plus the Kiro ACP feature, for trying the plugin out. -->
-<product name="Eclipse with Kiro ACP (dev)" uid="io.github.liaoalia.kiroacp.dev" id="org.eclipse.platform.ide" application="org.eclipse.ui.ide.workbench" version="0.1.2.qualifier" type="features" includeLaunchers="true" autoIncludeRequirements="true">
+<product name="Eclipse with Kiro ACP (dev)" uid="io.github.liaoalia.kiroacp.dev" id="org.eclipse.platform.ide" application="org.eclipse.ui.ide.workbench" version="0.2.0.qualifier" type="features" includeLaunchers="true" autoIncludeRequirements="true">
    <configIni use="default"/>
    <launcherArgs>
       <vmArgs>-Dosgi.requiredJavaVersion=17 -Xms256m -Xmx2048m</vmArgs>
