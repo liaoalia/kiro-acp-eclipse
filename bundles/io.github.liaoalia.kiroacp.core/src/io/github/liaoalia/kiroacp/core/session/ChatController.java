@@ -124,6 +124,15 @@ public final class ChatController implements AutoCloseable {
 		return hooks;
 	}
 
+	/**
+	 * Whether a page message of that type is acted on: by the controller itself, or by the
+	 * handler a feature registered. A type for which this is {@code false} is logged and dropped.
+	 * Callable from any thread.
+	 */
+	public boolean handles(Class<? extends FromWebview> type) {
+		return messages.handles(type);
+	}
+
 	/** What the IDE gave the controller: the features use the same workspace, settings, scheduler and log. */
 	public ChatHost host() {
 		return host;

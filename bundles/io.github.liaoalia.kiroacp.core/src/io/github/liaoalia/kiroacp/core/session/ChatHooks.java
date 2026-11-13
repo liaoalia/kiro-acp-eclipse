@@ -284,6 +284,11 @@ public final class ChatHooks {
 	// For the controller
 	// ---------------------------------------------------------------------
 
+	/** @return whether a feature registered a handler for that type of page message */
+	boolean handles(Class<? extends FromWebview> type) {
+		return handlers.containsKey(type);
+	}
+
 	/** @return whether a handler took the message */
 	@SuppressWarnings("unchecked")
 	boolean dispatch(FromWebview message, PageHandle page) {
