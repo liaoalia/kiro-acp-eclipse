@@ -47,6 +47,20 @@ class DiffStateTest {
 	}
 
 	@Test
+	void substitutionsAreTakenAndDroppedForTheToolCallsAskedFor() {
+		DiffState s = new DiffState();
+		s.addSubstitution("s1/tc", new Substitution("/a", "agent", "first"));
+		s.addSubstitution("s2/tc", new Substitution("/a", "agent", "second"));
+		s.addSubstitution("s2/other", new Substitution("/b", "agent", "third"));
+		assertNull(s.takeSubstitution("/a", "agent", id -> id.startsWith("s3/")), "nobody's");
+		assertEquals("second", s.takeSubstitution("/a", "agent", id -> id.startsWith("s2/")), "not the oldest: the one asked for");
+		assertEquals(2, s.substitutions().size());
+		s.dropSubstitutionsIf(id -> id.startsWith("s2/"));
+		assertEquals(List.of(new Substitution("/a", "agent", "first")), s.substitutions().stream().map(DiffState.Pending::sub).toList());
+		assertEquals("first", s.takeSubstitution("/a", "agent"));
+	}
+
+	@Test
 	void pendingForDropSubstitutionsReplaceSamePath() {
 		DiffState s = new DiffState();
 		s.addSubstitution("tc1", new Substitution("/a", "1", "2"));

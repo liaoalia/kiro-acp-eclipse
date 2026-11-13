@@ -12,17 +12,22 @@ import java.nio.file.Path;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.github.liaoalia.kiroacp.core.model.FromWebview;
 import io.github.liaoalia.kiroacp.core.model.PermissionView;
 import io.github.liaoalia.kiroacp.core.model.ToWebview;
 import io.github.liaoalia.kiroacp.core.model.ToolKind;
+import io.github.liaoalia.kiroacp.core.pure.permission.PolicyDecision;
 import io.github.liaoalia.kiroacp.core.pure.plan.PlanMarkdown;
+import io.github.liaoalia.kiroacp.core.services.PermissionManager;
 import io.github.liaoalia.kiroacp.core.session.Harness.Client;
 import io.github.liaoalia.kiroacp.core.session.plan.FakePlanDocuments;
 import io.github.liaoalia.kiroacp.core.session.plan.PlanDocument;
@@ -191,6 +196,66 @@ class ChatPlanTest {
 			assertEquals("end_turn", view.awaitTurnEnd(mark).stopReason());
 			assertTrue(agentTexts(view).contains("Plan rejected; staying in plan mode."), agentTexts(view).toString());
 			p.h.await(() -> !p.documents.offersApproval(id), "the buttons to go");
+		}
+	}
+
+	/** A request to leave planning, as the agent sends it. */
+	private static JsonNode switchMode(String sessionId, String toolCallId) {
+		ObjectNode request = Harness.MAPPER.createObjectNode().put("sessionId", sessionId);
+		request.putObject("toolCall").put("toolCallId", toolCallId).put("title", "Approve plan").put("kind", "switch_mode");
+		ArrayNode options = request.putArray("options");
+		options.addObject().put("optionId", "accept").put("name", "Approve").put("kind", "allow_once");
+		options.addObject().put("optionId", "reject").put("name", "Reject").put("kind", "reject_once");
+		return request;
+	}
+
+	@Test
+	void theButtonsOfADocumentAnswerTheRequestItShowsAndNoOther() throws Exception {
+		try (Plans p = new Plans(true)) {
+			Client view = p.h.openView("view");
+			String id = view.sessionId();
+			PermissionManager permissions = p.h.controller.permissions();
+			assertTrue(p.h.ask(() -> p.plan.open(id)));
+			CompletableFuture<JsonNode> first = permissions.request(switchMode(id, "call-1"), null);
+			p.h.await(() -> p.documents.offersApproval(id), "Approve and Reject in the plan document");
+			String shown = permissions.pendingIds().get(0);
+
+			// In one step of the controller thread, so before the document is brought up to date:
+			// the request it shows is answered in the chat, the agent asks again, for a plan the
+			// document does not show yet, and the user presses Approve.
+			int mark = view.mark();
+			CompletableFuture<JsonNode> second = p.h.ask(() -> {
+				permissions.decideRequest(shown, PolicyDecision.REJECT);
+				CompletableFuture<JsonNode> asked = permissions.request(switchMode(id, "call-2"), null);
+				p.documents.buttons(id).approve();
+				assertEquals("update " + id, p.documents.calls.get(p.documents.calls.size() - 1), "the document is brought up to date at once");
+				return asked;
+			});
+			assertEquals("reject", p.h.get(first).at("/outcome/optionId").asText());
+			assertFalse(second.isDone(), "a request whose plan was not shown is not answered");
+			p.h.scheduler.flush();
+			assertEquals(List.of("The plan changed after this document was last brought up to date. Review it again, then approve or reject it."),
+					notices(view, mark));
+			assertTrue(p.documents.offersApproval(id), "the second request is offered now");
+
+			// Now the document shows the second request, and its buttons answer it.
+			p.user(() -> p.documents.buttons(id).approve());
+			assertEquals("accept", p.h.get(second).at("/outcome/optionId").asText());
+			p.h.await(() -> !p.documents.offersApproval(id), "the buttons to go");
+
+			// A document that is behind when nothing waits any more: its buttons answer nothing and say nothing.
+			CompletableFuture<JsonNode> third = permissions.request(switchMode(id, "call-3"), null);
+			p.h.await(() -> p.documents.offersApproval(id), "Approve and Reject for the third request");
+			String last = permissions.pendingIds().get(0);
+			int quiet = view.mark();
+			p.user(() -> {
+				permissions.decideRequest(last, PolicyDecision.ALLOW);
+				p.documents.buttons(id).reject();
+				assertFalse(p.documents.offersApproval(id), "brought up to date at once");
+			});
+			assertEquals("accept", p.h.get(third).at("/outcome/optionId").asText(), "as it was answered in the chat");
+			p.h.scheduler.flush();
+			assertEquals(List.of(), notices(view, quiet));
 		}
 	}
 

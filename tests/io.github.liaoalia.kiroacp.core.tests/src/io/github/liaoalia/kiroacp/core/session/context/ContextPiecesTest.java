@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -169,6 +170,64 @@ class ContextPiecesTest {
 		assertEquals(List.of("a.txt"), found(FileScan.find(List.of(dir), "", 100, null, () -> asked.incrementAndGet() > 1)),
 				"the root was listed, then the walk was told to stop");
 		assertEquals(List.of(), FileScan.find(List.of(dir), "", 100, null, () -> true));
+	}
+
+	@Test
+	void aJunctionIsNotEnteredWhereverItLeads() throws Exception {
+		assumeTrue(Platform.current() == Platform.WIN32, "junctions are a thing of Windows");
+		Path root = dir.resolve("ws");
+		file("ws/app-one.txt");
+		file("ws/sub/app-two.txt");
+		file("outside/app-secret.txt");
+		Path out = root.resolve("sub").resolve("way-out");
+		Path up = root.resolve("sub").resolve("way-up");
+		try {
+			junction(out, dir.resolve("outside"));
+			junction(up, root);
+
+			assertEquals(List.of("ws/app-one.txt", "ws/sub/app-two.txt"), found(FileScan.find(List.of(root), "app", 100, null, () -> false)),
+					"nothing from outside the root, and nothing of the root a second time");
+			// A root is searched, also when it is a junction itself.
+			assertEquals(List.of("ws/sub/way-out/app-secret.txt"), found(FileScan.find(List.of(out), "", 100, null, () -> false)));
+		} finally {
+			// The junctions themselves, before the folder is cleaned up through them.
+			Files.deleteIfExists(out);
+			Files.deleteIfExists(up);
+		}
+		assertTrue(Files.exists(dir.resolve("outside").resolve("app-secret.txt")), "removing a junction leaves what it led to");
+		assertTrue(Files.exists(root.resolve("app-one.txt")));
+	}
+
+	@Test
+	void aLinkToAFileIsOfferedWhenTheFileIsInsideTheRoots() throws IOException {
+		Path root = dir.resolve("ws");
+		Path other = dir.resolve("other-root");
+		Path inside = file("ws/src/real.txt");
+		Path elsewhere = file("other-root/shared.txt");
+		Path outside = file("outside/secret.txt");
+		try {
+			Files.createSymbolicLink(root.resolve("link-inside.txt"), inside);
+			Files.createSymbolicLink(root.resolve("link-other-root.txt"), elsewhere);
+			Files.createSymbolicLink(root.resolve("link-outside.txt"), outside);
+			Files.createSymbolicLink(root.resolve("link-nowhere.txt"), dir.resolve("outside").resolve("gone.txt"));
+			Files.createSymbolicLink(root.resolve("link-folder"), dir.resolve("outside"));
+		} catch (IOException | UnsupportedOperationException | SecurityException e) {
+			// Windows without developer mode or the privilege, a file system without links.
+			assumeTrue(false, "symbolic links cannot be created here: " + e);
+		}
+
+		assertEquals(List.of("ws/link-inside.txt", "ws/src/real.txt"), found(FileScan.find(List.of(root), "", 100, null, () -> false)),
+				"the link to a file of the root; not the ones that lead out of it, nowhere, or to a folder");
+		assertEquals(List.of("ws/link-inside.txt", "ws/link-other-root.txt", "other-root/shared.txt", "ws/src/real.txt"),
+				found(FileScan.find(List.of(root, other), "", 100, null, () -> false)), "inside any of the roots");
+	}
+
+	/** {@code mklink /J}: needs no privilege, where a symbolic link does. */
+	private static void junction(Path link, Path target) throws Exception {
+		Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), target.toString())
+				.redirectErrorStream(true).start();
+		String said = new String(process.getInputStream().readAllBytes());
+		assertEquals(0, process.waitFor(), said);
 	}
 
 	// ---------------------------------------------------------------------

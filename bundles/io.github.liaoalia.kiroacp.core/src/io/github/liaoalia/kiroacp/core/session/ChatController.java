@@ -602,7 +602,8 @@ public final class ChatController implements AutoCloseable {
 		}
 		focusedId = sessionId;
 		host.actions().turnActiveChanged(session.turnActive);
-		// Seam (reference D11): the plan document follows the focused session.
+		// Seam: the focus moved. Nothing in the bundles listens to this yet; the plan is a document
+		// per session and does not follow the focus (DECISIONS D13), unlike the reference's (D11).
 		hooks.each(listener -> listener.focusChanged(sessionId));
 	}
 

@@ -24,8 +24,11 @@ import io.github.liaoalia.kiroacp.core.pure.context.FileSearch;
  * agent creates and moves files with its own commands, and a file it made a
  * moment ago is the likeliest one to be mentioned next. The walk is breadth
  * first, so when there are more matches than are asked for, the ones kept
- * are those nearest the roots. Links to folders are not followed (a link back
- * up would never end), and folders that cannot be read are passed over.
+ * are those nearest the roots. Links to folders are not followed, symbolic
+ * links and the junctions of Windows alike (a link back up would never end,
+ * and one that leads out of the roots would offer files that are not the
+ * workspace's); a link to a file is offered when the file is inside the roots.
+ * Folders that cannot be read are passed over.
  *
  * <p>Slow: never to be called on the controller thread.
  */
@@ -46,7 +49,9 @@ public final class FileScan {
 			BooleanSupplier cancelled) {
 		List<Path> found = new ArrayList<>();
 		Deque<Path[]> folders = new ArrayDeque<>();
-		for (Path root : outermost(roots)) {
+		List<Path> outermost = outermost(roots);
+		RealRoots realRoots = new RealRoots(outermost);
+		for (Path root : outermost) {
 			folders.add(new Path[] { root, root });
 		}
 		while (!folders.isEmpty() && found.size() < limit && !cancelled.getAsBoolean()) {
@@ -59,10 +64,12 @@ public final class FileScan {
 					continue;
 				}
 				if (attributes.isDirectory()) {
-					if (!FileSearch.EXCLUDED_FOLDERS.contains(String.valueOf(entry.getFileName())) && !excluded(excludedFolder, entry)) {
+					// A junction of Windows is a directory to the JDK, not a symbolic link, and "other" as well.
+					if (!attributes.isOther() && !FileSearch.EXCLUDED_FOLDERS.contains(String.valueOf(entry.getFileName()))
+							&& !excluded(excludedFolder, entry)) {
 						folders.add(new Path[] { entry, root });
 					}
-				} else if ((attributes.isRegularFile() || (attributes.isSymbolicLink() && Files.isRegularFile(entry)))
+				} else if ((attributes.isRegularFile() || (attributes.isSymbolicLink() && realRoots.holdFileOf(entry)))
 						&& FileSearch.matches(query, root.relativize(entry).toString())) {
 					found.add(entry);
 					if (found.size() >= limit) {
@@ -79,6 +86,39 @@ public final class FileScan {
 		List<Path> normalised = roots.stream().map(root -> root.toAbsolutePath().normalize()).distinct().toList();
 		return normalised.stream()
 				.filter(root -> normalised.stream().noneMatch(other -> !other.equals(root) && root.startsWith(other))).toList();
+	}
+
+	/** Where the roots really are, found out when the first link to a file asks. */
+	private static final class RealRoots {
+		private final List<Path> roots;
+		private List<Path> real;
+
+		RealRoots(List<Path> roots) {
+			this.roots = roots;
+		}
+
+		/** @return whether the link leads to a file inside one of the roots */
+		boolean holdFileOf(Path link) {
+			if (!Files.isRegularFile(link)) {
+				return false;
+			}
+			try {
+				Path target = link.toRealPath();
+				if (real == null) {
+					real = new ArrayList<>();
+					for (Path root : roots) {
+						try {
+							real.add(root.toRealPath());
+						} catch (IOException | RuntimeException e) {
+							// A root that is not there holds nothing.
+						}
+					}
+				}
+				return real.stream().anyMatch(target::startsWith);
+			} catch (IOException | RuntimeException e) {
+				return false;
+			}
+		}
 	}
 
 	private static boolean excluded(Predicate<Path> excludedFolder, Path folder) {

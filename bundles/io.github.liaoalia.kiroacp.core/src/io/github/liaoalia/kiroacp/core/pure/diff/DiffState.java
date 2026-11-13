@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -114,10 +115,19 @@ public final class DiffState {
 	 * {@code null}.
 	 */
 	public String takeSubstitution(String path, String content) {
+		return takeSubstitution(path, content, toolCallId -> true);
+	}
+
+	/**
+	 * {@link #takeSubstitution(String, String)} among the substitutions of the
+	 * tool calls {@code toolCall} accepts: whoever knows which tool calls a
+	 * write can belong to leaves the others' substitutions alone.
+	 */
+	public String takeSubstitution(String path, String content, Predicate<String> toolCall) {
 		String key = normalize.apply(path);
 		for (int i = 0; i < subs.size(); i++) {
 			Substitution sub = subs.get(i).sub();
-			if (sub.path().equals(key) && sub.agentText().equals(content)) {
+			if (sub.path().equals(key) && sub.agentText().equals(content) && toolCall.test(subs.get(i).toolCallId())) {
 				subs.remove(i);
 				return sub.userText();
 			}
@@ -133,6 +143,11 @@ public final class DiffState {
 	/** Drop every substitution of a tool call (e.g. on failed/cancelled). */
 	public void dropSubstitutions(String toolCallId) {
 		subs.removeIf(s -> s.toolCallId().equals(toolCallId));
+	}
+
+	/** Drop every substitution of the tool calls {@code toolCall} accepts. */
+	public void dropSubstitutionsIf(Predicate<String> toolCall) {
+		subs.removeIf(s -> toolCall.test(s.toolCallId()));
 	}
 
 	/** All pending substitutions (diagnostics/tests). */

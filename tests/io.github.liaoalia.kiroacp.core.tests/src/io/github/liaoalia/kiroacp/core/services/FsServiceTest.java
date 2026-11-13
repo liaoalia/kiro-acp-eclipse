@@ -239,12 +239,14 @@ class FsServiceTest {
 	@Test
 	void theInterceptorDecidesWhatIsWritten() throws Exception {
 		Path file = root.resolve("edited.txt");
-		fs.setWriteInterceptor((path, content) -> path.equals(file.toString()) ? content + " (edited by the user)" : content);
+		fs.setWriteInterceptor((session, path, content) -> path.equals(file.toString())
+				? content + " (edited by the user in " + session + ")"
+				: content);
 
 		get(fs.writeTextFile(write(file, "proposal")));
 
-		assertEquals("proposal (edited by the user)", text(file));
-		assertEquals(List.of(new FsService.FsWriteEvent(file.toString(), "proposal (edited by the user)")), written);
+		assertEquals("proposal (edited by the user in s1)", text(file), "the interceptor is told the session of the request");
+		assertEquals(List.of(new FsService.FsWriteEvent(file.toString(), "proposal (edited by the user in s1)")), written);
 
 		fs.setWriteInterceptor(null);
 		get(fs.writeTextFile(write(file, "plain")));

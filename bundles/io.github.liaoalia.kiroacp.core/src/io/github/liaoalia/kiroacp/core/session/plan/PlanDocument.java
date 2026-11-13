@@ -69,6 +69,12 @@ public final class PlanDocument implements AutoCloseable {
 	/** The sessions a document was shown for and not closed here; the user may have closed it. */
 	private final Set<String> shown = new LinkedHashSet<>();
 	private final Set<String> dirty = new LinkedHashSet<>();
+	/**
+	 * The request to leave planning each session's document was last written
+	 * for, {@code null} when it offered nothing to answer: what its Approve
+	 * and Reject answer.
+	 */
+	private final Map<String, String> shownRequest = new HashMap<>();
 	private Subscription refresh;
 	private boolean closed;
 
@@ -148,18 +154,20 @@ public final class PlanDocument implements AutoCloseable {
 			return false;
 		}
 		try {
-			documents.show(id, content(id), new PlanDocuments.Approval() {
+			PendingPermission pending = pending(id);
+			documents.show(id, content(id, pending), new PlanDocuments.Approval() {
 				@Override
 				public void approve() {
-					PlanDocument.this.approve(id);
+					approveShown(id);
 				}
 
 				@Override
 				public void reject() {
-					PlanDocument.this.reject(id);
+					rejectShown(id);
 				}
 			});
 			shown.add(id);
+			shownRequest.put(id, pending != null ? pending.requestId() : null);
 			return true;
 		} catch (RuntimeException e) {
 			controller.notice(id, Severity.WARNING, "Could not open the plan: " + message(e));
@@ -191,6 +199,23 @@ public final class PlanDocument implements AutoCloseable {
 		answer(sessionId, PolicyDecision.REJECT);
 	}
 
+	/**
+	 * Approve what the session's document shows: the request its text was
+	 * last written for, and no other. A document is brought up to date a
+	 * moment after things change, so the request it offers to answer may be
+	 * answered already, and the agent may have asked again for a plan the
+	 * document does not show yet. Then nothing is answered: the document is
+	 * brought up to date, and the user is told to read it again.
+	 */
+	public void approveShown(String sessionId) {
+		answerShown(sessionId, PolicyDecision.ALLOW);
+	}
+
+	/** Reject what the session's document shows; see {@link #approveShown}. */
+	public void rejectShown(String sessionId) {
+		answerShown(sessionId, PolicyDecision.REJECT);
+	}
+
 	@Override
 	public void close() {
 		closed = true;
@@ -210,12 +235,28 @@ public final class PlanDocument implements AutoCloseable {
 	// ---------------------------------------------------------------------
 
 	private Content content(String sessionId) {
+		return content(sessionId, pending(sessionId));
+	}
+
+	/** @param pending the request to leave planning the text is written for, or {@code null} */
+	private Content content(String sessionId, PendingPermission pending) {
 		TranscriptState transcript = controller.transcript(sessionId);
 		List<PlanEntryView> entries = transcript != null ? transcript.plan() : List.of();
 		Long at = updatedAt.get(sessionId);
 		LocalTime time = at != null ? Instant.ofEpochMilli(at).atZone(zone).toLocalTime() : null;
-		boolean pending = pending(sessionId) != null;
-		return new Content(PlanMarkdown.render(entries, sessionId, time, pending), pending);
+		return new Content(PlanMarkdown.render(entries, sessionId, time, pending != null), pending != null);
+	}
+
+	/** Brings the session's document up to date, and remembers which request it now offers to answer. */
+	private void update(String sessionId) {
+		dirty.remove(sessionId);
+		try {
+			PendingPermission pending = pending(sessionId);
+			documents.update(sessionId, content(sessionId, pending));
+			shownRequest.put(sessionId, pending != null ? pending.requestId() : null);
+		} catch (RuntimeException e) {
+			logger.warn("plan document of " + sessionId + " could not be updated: " + message(e));
+		}
 	}
 
 	/**
@@ -259,11 +300,7 @@ public final class PlanDocument implements AutoCloseable {
 			if (closed || !shown.contains(sessionId)) {
 				continue;
 			}
-			try {
-				documents.update(sessionId, content(sessionId));
-			} catch (RuntimeException e) {
-				logger.warn("plan document of " + sessionId + " could not be updated: " + message(e));
-			}
+			update(sessionId);
 		}
 	}
 
@@ -277,6 +314,7 @@ public final class PlanDocument implements AutoCloseable {
 		updatedAt.remove(sessionId);
 		autoOpened.remove(sessionId);
 		dirty.remove(sessionId);
+		shownRequest.remove(sessionId);
 		if (shown.remove(sessionId)) {
 			try {
 				documents.close(sessionId);
@@ -309,6 +347,33 @@ public final class PlanDocument implements AutoCloseable {
 					"Nothing is awaiting approval: Kiro has not asked to switch out of planning yet.");
 			return;
 		}
+		decide(pending, decision);
+	}
+
+	/** The buttons of a document: they answer the request the document shows, or none. */
+	private void answerShown(String sessionId, PolicyDecision decision) {
+		String requestId = shownRequest.get(sessionId);
+		PendingPermission offered = requestId != null ? permissions.getEntry(requestId) : null;
+		if (offered != null) {
+			decide(offered, decision);
+			return;
+		}
+		// The document is behind, or offers nothing to answer.
+		PendingPermission waiting = pending(sessionId);
+		if (!closed && shown.contains(sessionId)) {
+			update(sessionId);
+		}
+		if (waiting != null) {
+			controller.notice(sessionId, Severity.INFO,
+					"The plan changed after this document was last brought up to date. Review it again, then approve or reject it.");
+		} else if (requestId == null) {
+			// Nothing was offered: this was the command, with the document in front.
+			controller.notice(sessionId, Severity.INFO,
+					"Nothing is awaiting approval: Kiro has not asked to switch out of planning yet.");
+		}
+	}
+
+	private void decide(PendingPermission pending, PolicyDecision decision) {
 		if (permissions.decideRequest(pending.requestId(), decision) == null) {
 			controller.notice(pending.sessionId(), Severity.WARNING, "The agent offered no \""
 					+ (decision == PolicyDecision.ALLOW ? "allow" : "reject") + "\" option for this request; answer it in the chat view.");

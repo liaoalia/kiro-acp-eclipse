@@ -50,7 +50,8 @@ public final class FsService implements AutoCloseable {
 	@FunctionalInterface
 	public interface WriteInterceptor {
 
-		String intercept(String absPath, String content);
+		/** @param sessionId the request's {@code sessionId}; {@code null} when the agent sent none */
+		String intercept(String sessionId, String absPath, String content);
 	}
 
 	private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
@@ -133,11 +134,12 @@ public final class FsService implements AutoCloseable {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("content must be a string"));
 		}
 		String requested = req.get("content").textValue();
+		String sessionId = req.path("sessionId").isTextual() ? req.get("sessionId").textValue() : null;
 		CompletableFuture<JsonNode> result = new CompletableFuture<>();
 		submit(result, () -> {
 			Path file = Path.of(absPath);
 			if (isInsideWorkspace(absPath)) {
-				write(file, absPath, requested, result);
+				write(file, sessionId, absPath, requested, result);
 				return;
 			}
 			CompletionStage<Boolean> answer = files.confirmOutsideWorkspace(file);
@@ -152,7 +154,7 @@ public final class FsService implements AutoCloseable {
 					result.completeExceptionally(denied(absPath));
 				} else {
 					// Back on the worker: the answer arrives on the UI's thread.
-					submit(result, () -> write(file, absPath, requested, result));
+					submit(result, () -> write(file, sessionId, absPath, requested, result));
 				}
 			});
 		});
@@ -165,10 +167,10 @@ public final class FsService implements AutoCloseable {
 		worker.shutdown();
 	}
 
-	private void write(Path file, String absPath, String requested, CompletableFuture<JsonNode> result)
+	private void write(Path file, String sessionId, String absPath, String requested, CompletableFuture<JsonNode> result)
 			throws IOException {
 		WriteInterceptor interceptor = writeInterceptor;
-		String content = interceptor != null ? interceptor.intercept(absPath, requested) : requested;
+		String content = interceptor != null ? interceptor.intercept(sessionId, absPath, requested) : requested;
 		files.write(file, content);
 		FsWriteEvent event = new FsWriteEvent(absPath, content);
 		for (Consumer<FsWriteEvent> listener : writeListeners) {

@@ -11,8 +11,8 @@ import io.github.liaoalia.kiroacp.ui.chat.KiroChat;
  * "Open Kiro Plan", "Approve Kiro Plan" and "Reject Kiro Plan" (the
  * reference's {@code kiroAcp.openPlan}, {@code approvePlan} and
  * {@code rejectPlan}). Open shows the plan of the session used last. Approve
- * and Reject answer the request of the plan editor that is active, else of
- * whichever session waits for an approval.
+ * and Reject answer the request the active plan editor shows, as its buttons
+ * do, else that of whichever session waits for an approval.
  */
 public final class PlanCommandHandler extends AbstractHandler {
 
@@ -31,9 +31,18 @@ public final class PlanCommandHandler extends AbstractHandler {
 		if (command.equals(PREFIX + "openPlan")) {
 			plan.open(null);
 		} else if (command.equals(PREFIX + "approvePlan")) {
-			plan.approve(session);
+			// With a plan editor in front, the command is that editor's button: it answers what the editor shows.
+			if (session != null) {
+				plan.approveShown(session);
+			} else {
+				plan.approve(null);
+			}
 		} else if (command.equals(PREFIX + "rejectPlan")) {
-			plan.reject(session);
+			if (session != null) {
+				plan.rejectShown(session);
+			} else {
+				plan.reject(null);
+			}
 		}
 		return null;
 	}

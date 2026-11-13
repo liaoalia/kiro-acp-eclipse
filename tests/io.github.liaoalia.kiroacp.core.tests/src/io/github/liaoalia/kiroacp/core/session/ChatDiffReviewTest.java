@@ -19,6 +19,7 @@ import io.github.liaoalia.kiroacp.core.host.Settings.AutoOpenDiffs;
 import io.github.liaoalia.kiroacp.core.model.FromWebview;
 import io.github.liaoalia.kiroacp.core.model.PermissionView;
 import io.github.liaoalia.kiroacp.core.model.ToWebview;
+import io.github.liaoalia.kiroacp.core.model.ToolContentView;
 import io.github.liaoalia.kiroacp.core.model.ToolKind;
 import io.github.liaoalia.kiroacp.core.session.Harness.Client;
 import io.github.liaoalia.kiroacp.core.session.diff.DiffReview;
@@ -306,6 +307,38 @@ class ChatDiffReviewTest {
 			assertEquals("end_turn", b.awaitTurnEnd(markB).stopReason());
 			assertEquals("{ \"b\": 1 }\n", read("config.json"));
 			r.awaitNoEditor();
+		}
+	}
+
+	@Test
+	void anEditTheAgentNeverWroteDoesNotOutliveItsTurn() throws Exception {
+		try (Review r = new Review(AutoOpenDiffs.WHEN_PERMISSION_REQUIRED)) {
+			Client view = r.h.openView("view");
+			String id = view.sessionId();
+			String agents = "{ \"debug\": true }\n";
+			// A proposal the user edits and accepts, and whose tool call is never heard of again:
+			// what a turn that is stopped before the agent writes leaves behind.
+			ToolContentView.Diff diff = new ToolContentView.Diff(dir.resolve("config.json").toString(), "{}", agents);
+			r.user(() -> r.review.open(id, "call-stopped", 0, diff));
+			Editor editor = r.awaitEditor();
+			editor.type("{ \"debug\": false }\n");
+			r.user(editor::accept);
+			r.awaitNoEditor();
+			assertEquals(1, r.review.pendingSubstitutions(id, "call-stopped").size(), "the edit waits for the agent's write");
+
+			assertEquals("end_turn", view.turn("/scenario chat").stopReason());
+			assertEquals(List.of(), r.review.pendingSubstitutions(id, "call-stopped"), "the end of the turn dropped it");
+
+			// The agent proposes the same text for the same file again; accepted as it is, it is what is written.
+			int mark = view.mark();
+			view.prompt("/scenario permission-reject");
+			awaitPermission(view, mark);
+			Editor again = r.awaitEditor();
+			assertEquals(agents, again.proposal().proposed());
+			r.user(again::accept);
+			assertEquals("end_turn", view.awaitTurnEnd(mark).stopReason());
+			assertEquals(agents, read("config.json"));
+			assertFalse(r.h.logger.has("diff: substituted user edits for"), r.h.logger.lines.toString());
 		}
 	}
 

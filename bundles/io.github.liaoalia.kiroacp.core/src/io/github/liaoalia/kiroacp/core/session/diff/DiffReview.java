@@ -57,7 +57,9 @@ import io.github.liaoalia.kiroacp.core.session.ChatHost;
  * through {@code fs/write_text_file}, {@code userText} is written instead
  * ({@link #interceptWrite}). An agent that wrote the file itself is corrected
  * once the tool call completes, if the file then holds the agent's text. This
- * is best effort: an agent that writes something else is left alone.
+ * is best effort: an agent that writes something else is left alone. What was
+ * accepted counts for writes of its own session and until the turn ends
+ * ({@link #turnEnded}).
  *
  * <p>Tool call ids are only unique within a session, so everything here is
  * kept per session and tool call.
@@ -175,6 +177,11 @@ public final class DiffReview implements AutoCloseable {
 		@Override
 		public void permissionRequested(String sessionId, PermissionView request) {
 			DiffReview.this.permissionRequested(sessionId, request);
+		}
+
+		@Override
+		public void turnEnded(String sessionId, String stopReason) {
+			DiffReview.this.turnEnded(sessionId);
 		}
 
 		@Override
@@ -306,14 +313,29 @@ public final class DiffReview implements AutoCloseable {
 					calls.add(entry.call);
 				}
 			}
-			for (DiffState.Pending pending : state.substitutions()) {
-				if (pending.toolCallId().startsWith(prefix)) {
-					state.dropSubstitutions(pending.toolCallId());
-				}
-			}
+			state.dropSubstitutionsIf(call -> call.startsWith(prefix));
 		}
 		for (String call : calls) {
 			finish(call, false);
+		}
+	}
+
+	/**
+	 * The turn of the session is over: what the user accepted in it and the
+	 * agent did not write is not written any more. Without this, the edited
+	 * text of a proposal whose tool call never reached a final status (a turn
+	 * that was stopped) would replace the agent's text in a later turn, when
+	 * the agent proposes the same text for the same file again and the user
+	 * accepts it as it is.
+	 *
+	 * <p>Nothing that should be replaced is written after the end of a turn:
+	 * the agent writes and reports its tool calls before it answers the
+	 * prompt, and the late output of a turn the Stop watchdog ended is ignored.
+	 */
+	public void turnEnded(String sessionId) {
+		String prefix = sessionId + SEPARATOR;
+		synchronized (lock) {
+			state.dropSubstitutionsIf(call -> call.startsWith(prefix));
 		}
 	}
 
@@ -409,11 +431,19 @@ public final class DiffReview implements AutoCloseable {
 	 * The {@code FsService}'s write interceptor: when the agent writes exactly
 	 * the text the user edited away from, the user's text is written instead.
 	 * Any thread.
+	 *
+	 * @param sessionId the session the agent writes for: only what was accepted in that session
+	 *                  counts. {@code null} when the request named none; then any session's does
 	 */
-	public String interceptWrite(String absPath, String content) {
+	public String interceptWrite(String sessionId, String absPath, String content) {
 		String substituted;
 		synchronized (lock) {
-			substituted = state.takeSubstitution(absPath, content);
+			if (sessionId == null) {
+				substituted = state.takeSubstitution(absPath, content);
+			} else {
+				String prefix = sessionId + SEPARATOR;
+				substituted = state.takeSubstitution(absPath, content, call -> call.startsWith(prefix));
+			}
 		}
 		if (substituted != null) {
 			logger.info("diff: substituted user edits for " + absPath);

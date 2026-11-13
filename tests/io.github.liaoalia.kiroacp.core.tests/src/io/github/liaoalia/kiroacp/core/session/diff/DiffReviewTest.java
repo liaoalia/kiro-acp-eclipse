@@ -224,11 +224,48 @@ class DiffReviewTest {
 		assertEquals(List.of(new Substitution(TextRange.normalizeFsPath(file.toString()), "agent\n", "user\n")),
 				review.pendingSubstitutions(SESSION, "tc"));
 
-		assertEquals("something else\n", review.interceptWrite(file.toString(), "something else\n"), "text must match");
-		assertEquals("agent\n", review.interceptWrite(dir.resolve("b.txt").toString(), "agent\n"), "path must match");
-		assertEquals("user\n", review.interceptWrite(file.toString().replace('\\', '/'), "agent\n"));
-		assertEquals("agent\n", review.interceptWrite(file.toString(), "agent\n"), "used up");
+		assertEquals("something else\n", review.interceptWrite(SESSION,file.toString(), "something else\n"), "text must match");
+		assertEquals("agent\n", review.interceptWrite(SESSION,dir.resolve("b.txt").toString(), "agent\n"), "path must match");
+		assertEquals("user\n", review.interceptWrite(SESSION,file.toString().replace('\\', '/'), "agent\n"));
+		assertEquals("agent\n", review.interceptWrite(SESSION,file.toString(), "agent\n"), "used up");
 		assertEquals(List.of(), review.pendingSubstitutions(SESSION, "tc"));
+	}
+
+	@Test
+	void whatWasAcceptedInATurnThatEndedIsNotWrittenInALaterOne() throws Exception {
+		// Edited and accepted, then Stop: the agent never writes, and never says what became of the tool call.
+		acceptEdited("tc", "agent\n", "user\n");
+		controller.run(() -> review.open("sess-2", "tc", 0, diff("old\n", "agent\n")));
+		Editor others = awaitEditor();
+		others.type("theirs\n");
+		controller.run(others::accept);
+
+		controller.run(() -> review.turnEnded(SESSION));
+
+		assertEquals(List.of(), review.pendingSubstitutions(SESSION, "tc"), "the turn took its substitution along");
+		assertEquals(1, review.pendingSubstitutions("sess-2", "tc").size(), "the other session's turn goes on");
+
+		// Later the agent proposes the same text for the same file, and the user accepts it as it is.
+		open("tc-2", 0, diff("old\n", "agent\n"));
+		Editor again = awaitEditor();
+		controller.run(again::accept);
+		assertEquals("agent\n", review.interceptWrite(SESSION, file.toString(), "agent\n"),
+				"what the user accepted this time is written, not the edit of the turn that was stopped");
+		assertEquals("theirs\n", review.interceptWrite("sess-2", file.toString(), "agent\n"));
+	}
+
+	@Test
+	void aWriteTakesOnlyWhatWasAcceptedInItsOwnSession() throws Exception {
+		acceptEdited("tc", "agent\n", "user\n");
+
+		assertEquals("agent\n", review.interceptWrite("sess-2", file.toString(), "agent\n"),
+				"another session writing the same text to the same file");
+		assertEquals(1, review.pendingSubstitutions(SESSION, "tc").size(), "and the substitution still waits for its own");
+		assertEquals("user\n", review.interceptWrite(SESSION, file.toString(), "agent\n"));
+
+		// An agent that does not say which session it writes for gets what any session accepted.
+		acceptEdited("tc", "agent\n", "user\n");
+		assertEquals("user\n", review.interceptWrite(null, file.toString(), "agent\n"));
 	}
 
 	@Test
@@ -238,7 +275,7 @@ class DiffReviewTest {
 		controller.run(editor::accept);
 		assertEquals(0, editors.count());
 		assertEquals(List.of(), review.pendingSubstitutions(SESSION, "tc"));
-		assertEquals("agent\n", review.interceptWrite(file.toString(), "agent\n"));
+		assertEquals("agent\n", review.interceptWrite(SESSION,file.toString(), "agent\n"));
 	}
 
 	@Test
@@ -273,7 +310,7 @@ class DiffReviewTest {
 		awaitWorker();
 		assertEquals("something else entirely\n", read());
 		assertEquals(List.of(), review.pendingSubstitutions(SESSION, "tc"), "and the substitution is gone");
-		assertEquals("agent\n", review.interceptWrite(file.toString(), "agent\n"));
+		assertEquals("agent\n", review.interceptWrite(SESSION,file.toString(), "agent\n"));
 	}
 
 	@Test
@@ -327,7 +364,7 @@ class DiffReviewTest {
 
 		// What is accepted replaces the agent's latest text.
 		controller.run(editor::accept);
-		assertEquals("mine\n", review.interceptWrite(file.toString(), "v3\n"));
+		assertEquals("mine\n", review.interceptWrite(SESSION,file.toString(), "v3\n"));
 	}
 
 	@Test
@@ -384,7 +421,7 @@ class DiffReviewTest {
 
 		assertEquals("accept", answer.get(SECONDS, TimeUnit.SECONDS).at("/outcome/optionId").asText());
 		assertEquals(0, editors.count());
-		assertEquals("user\n", review.interceptWrite(file.toString(), "agent\n"));
+		assertEquals("user\n", review.interceptWrite(SESSION,file.toString(), "agent\n"));
 	}
 
 	@Test
