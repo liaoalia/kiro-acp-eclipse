@@ -7,6 +7,12 @@
    <description>
       Chat with the Kiro agent inside Eclipse over the Agent Client Protocol (ACP).
    </description>
+   <copyright>
+      Copyright (c) 2026 liaoalia
+   </copyright>
+   <license url="https://github.com/liaoalia/kiro-acp-eclipse/blob/main/LICENSE">
+      MIT License. The full text is in the LICENSE file of the repository.
+   </license>
    <!-- Jackson is not part of every Eclipse package, so it travels with the feature. -->
    <plugin id="com.fasterxml.jackson.core.jackson-annotations" version="0.0.0"/>
    <plugin id="com.fasterxml.jackson.core.jackson-core" version="0.0.0"/>

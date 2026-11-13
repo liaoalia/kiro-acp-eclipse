@@ -99,3 +99,18 @@ The plan is shown as plain Markdown text in a read-only editor of its own, one p
 
 A usage poll (`_kiro/session/context`) the agent rejects is not repeated for that agent process.
 
+## D14. What is not ported from the extension (2026-11-13)
+
+Checked against the reference at 0.3.11; `ReferenceCommandsTest` and `PreferenceSettingsTest` pin the commands and settings that are.
+
+- **`kiroAcp.chatLocation` and the chat as an editor tab.** The chat is an Eclipse view; where it sits is the user's perspective layout, not a setting. "New Kiro Chat View" opens a further view where the reference opens a further tab (`kiroAcp.openInEditor`).
+- **`kiroAcp.newSessionInSidebar`, `kiroAcp.openPastSessionInSidebar`.** There is one kind of chat view, so there is nothing to tell apart.
+- **`kiroAcp.openPastSession` as a workbench command.** The page's history button opens the dialog of past sessions.
+- **`kiroAcp.acceptDiff` / `kiroAcp.rejectDiff`.** Accept and Reject are buttons above the panes of the compare editor.
+- **Dropping files onto the chat.** A file dropped on the embedded page arrives as bytes without a path; the page attaches images itself and refuses other files. `@` attaches a file.
+- **Agent link** (`kiroAcp.agentLink.enabled`, reference D30). Experimental and uncommitted in the reference when this was checked.
+- **The prompt "Kiro CLI settings changed. Restart the agent to apply."** A changed path or arguments apply when the agent is next started; the preference page says so.
+- **Hiding "Cancel Current Turn" while no turn runs.** The command is always in the view menu and does nothing without a turn.
+
+One setting behaves as in the reference only since 0.2.1: the extra CLI arguments follow `acp`. Before, they replaced it, so the preference page's own example started the CLI without `acp`.
+

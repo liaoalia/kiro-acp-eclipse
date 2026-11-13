@@ -56,7 +56,7 @@ class ReferenceCommandsTest {
 		COMMANDS.put("kiroAcp.rejectPlan", "rejectPlan");
 		COMMANDS.put("kiroAcp.focus", "focusChat");
 		// "New Chat Tab": nothing here opens a second chat view.
-		COMMANDS.put("kiroAcp.openInEditor", NOT_PORTED);
+		COMMANDS.put("kiroAcp.openInEditor", "newChatView");
 	}
 
 	@Test
@@ -97,14 +97,14 @@ class ReferenceCommandsTest {
 		Set<String> mapped = new TreeSet<>();
 		COMMANDS.values().stream().filter(id -> id != NOT_PORTED).forEach(id -> mapped.add(PREFIX + id));
 		assertEquals(mapped, contributed);
-		assertEquals(11, contributed.size());
+		assertEquals(12, contributed.size());
 	}
 
 	@Test
 	void theCommandsOfTheViewAreOfferedInItsToolbarAndMenu() {
 		// Reference: view/title. Here the toolbar and the menu of the chat view; Send Selection is in the editors' context menu.
 		assertEquals(List.of("newSession"), contributedTo("toolbar:io.github.liaoalia.kiroacp.chat"));
-		assertEquals(List.of("cancelTurn", "restartAgent", "login", "showLog", "forgetSessionOptions", "openPlan"),
+		assertEquals(List.of("newChatView", "cancelTurn", "restartAgent", "login", "showLog", "forgetSessionOptions", "openPlan"),
 				contributedTo("menu:io.github.liaoalia.kiroacp.chat"));
 		assertEquals(List.of("sendSelection"), contributedTo("popup:org.eclipse.ui.popup.any?after=additions"));
 	}

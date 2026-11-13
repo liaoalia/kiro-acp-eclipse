@@ -1,4 +1,5 @@
 // Copies the fake agent and its recordings from the reference VS Code extension.
+// It copies the working tree: sync from a reference without uncommitted changes.
 //   node tests/fixtures/sync.mjs [path to the reference repository]
 // The copies are verbatim: change them in the reference, then sync again.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -16,6 +17,10 @@ if (!existsSync(agent) || !existsSync(recordings)) {
 
 mkdirSync(join(here, "fake-agent"), { recursive: true });
 cpSync(agent, join(here, "fake-agent", "agent.mjs"));
+// The wrappers that start it as a command, for pointing the plugin at it by hand.
+for (const wrapper of ["kiro-cli-fake", "kiro-cli-fake.cmd"]) {
+  cpSync(join(source, "test", "fake-agent", wrapper), join(here, "fake-agent", wrapper));
+}
 // Recordings deleted in the reference must not linger here.
 rmSync(join(here, "recordings"), { recursive: true, force: true });
 cpSync(recordings, join(here, "recordings"), { recursive: true });

@@ -248,17 +248,19 @@ Owns: `core/.../pure/slash/`, `core/.../pure/usage/`, `core/.../pure/plan/`, `ui
 ### Wave 4 (serial): finish
 
 ### Task 17: Verify acceptance criteria
-- [ ] every `FromWebview` type is handled and every `ToWebview` type is emitted somewhere (a test enumerates the vendored protocol samples)
-- [ ] every row of the reference verification table has a passing automated test here against the fake agent
-- [ ] every setting and command of the reference `package.json` is implemented or listed as not ported in `docs/DECISIONS.md`
-- [ ] re-vendoring the webview from the current reference still builds and passes
-- [ ] run the validation commands
+- [x] every `FromWebview` type is handled and every `ToWebview` type is emitted somewhere: `PageProtocolCoverageTest` sends every protocol sample through a controller (all 23 types handled once the features are installed), `KiroChatFeaturesTest` asks the real `KiroChat.install` for each type, and the sources are scanned for the construction of each of the 22 `ToWebview` types
+- [x] every row of the reference verification table has a passing automated test here against the fake agent, except: F8.1 (chat as an editor tab, not ported), F17 (agent link, not ported), and the workbench or desktop halves of F2 (the compare editor), F3 (the plan editor part), F5.1 (the handler against a real editor), F6.1 (the Console view), F14 (the terminal window), F16.6 (the file dialog), F16.7 (a real drop). Added for rows that had none: the agent's read of unsaved edits, the tour in hidden terminal mode, non-default picker settings
+- [x] every setting and command of the reference `package.json` is implemented or listed as not ported in `docs/DECISIONS.md` (D14); `ReferenceCommandsTest` pins the commands against the plug-in registry
+- [x] re-vendoring the webview from the reference at 0.3.11 changes nothing but the stamp; builds and passes
+- [x] run the validation commands (core 579 tests, 1 skipped where symbolic links cannot be created; ui 223)
+- ➕ found and fixed: the extra CLI arguments replaced `acp` instead of following it; the "session list collapsed" setting had no field on the preference page; no command opened a second chat view ("New Kiro Chat View", executed by no test)
+- ⚠️ the fake agent is kept at the reference's committed 0.3.11; the reference's uncommitted agent-link work was not taken over
 
 ### Task 18: Packaging and documentation
-- [ ] feature metadata, licence (MIT), update site categories; CI uploads the site and attaches it to a release on a `v*` tag
-- [ ] `README.md`: install, settings, commands, pointing the plugin at the fake agent, how to re-vendor the webview
-- [ ] `docs/protocol-notes.md`: what was verified with the Java client
-- [ ] run the validation commands
+- [x] feature metadata, licence (MIT), update site categories; CI uploads the site and attaches it to a release on a `v*` tag
+- [x] `README.md`: install, settings, commands, pointing the plugin at the fake agent, how to re-vendor the webview
+- [x] `docs/protocol-notes.md`: what was verified with the Java client
+- [x] run the validation commands
 
 ## Technical Details
 - Page bridge: page → host is `window.__kiroHost(json)` (a `BrowserFunction`, handled with `asyncExec` so the browser is never re-entered from its own callback); host → page is `Browser.execute("window.__kiroReceive(<json>)")`, which dispatches a `message` event like VS Code does.

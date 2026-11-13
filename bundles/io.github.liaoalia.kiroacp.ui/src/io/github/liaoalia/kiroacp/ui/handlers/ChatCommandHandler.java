@@ -1,5 +1,7 @@
 package io.github.liaoalia.kiroacp.ui.handlers;
 
+import java.util.UUID;
+
 import org.eclipse.core.commands.AbstractHandler;
 import org.eclipse.core.commands.ExecutionEvent;
 import org.eclipse.core.commands.ExecutionException;
@@ -21,6 +23,7 @@ public final class ChatCommandHandler extends AbstractHandler {
 	static final String CANCEL = PREFIX + "cancelTurn";
 	static final String RESTART = PREFIX + "restartAgent";
 	static final String SHOW_LOG = PREFIX + "showLog";
+	static final String NEW_VIEW = PREFIX + "newChatView";
 
 	@Override
 	public Object execute(ExecutionEvent event) throws ExecutionException {
@@ -30,6 +33,18 @@ public final class ChatCommandHandler extends AbstractHandler {
 			KiroChat chat = window == null ? KiroChat.peek() : KiroChat.get(window.getShell().getDisplay());
 			if (chat != null) {
 				chat.logger().show();
+			}
+			return null;
+		}
+		if (NEW_VIEW.equals(command)) {
+			// One more chat view beside the ones there are: each view has its own sessions.
+			IWorkbenchPage page = window == null ? null : window.getActivePage();
+			if (page != null) {
+				try {
+					page.showView(ChatView.ID, UUID.randomUUID().toString(), IWorkbenchPage.VIEW_ACTIVATE);
+				} catch (PartInitException e) {
+					throw new ExecutionException("Could not open another Kiro Chat view", e);
+				}
 			}
 			return null;
 		}

@@ -21,7 +21,54 @@ It is a port of the VS Code extension of the same name. The chat page is that ex
 
 To update, install a newer zip the same way. To remove: *Help > About Eclipse IDE > Installation Details*, select *Kiro ACP Chat*, *Uninstall…*.
 
-A release is made by pushing a tag: `git tag v0.1.0 && git push origin v0.1.0` runs `.github/workflows/release.yml`, which builds, tests and attaches the zip.
+A release is made by pushing a tag: `git tag v0.2.1 && git push origin v0.2.1` runs `.github/workflows/release.yml`, which builds, tests and attaches the zip.
+
+## Settings
+
+*Window > Preferences > Kiro ACP Chat*. They are the settings of the VS Code extension, with the same defaults.
+
+| Setting | Default | What it does |
+|---|---|---|
+| Kiro CLI | `kiro-cli` | The command or path of the CLI. A bare name is looked up on `PATH` and where the installers put it. |
+| Extra arguments | empty | Added after `acp`, for example `--agent-engine=v3`. |
+| Attach the active file | off | Every prompt carries the file of the active editor as a chip. |
+| Open proposed changes | when a permission is required | Also: always, never. |
+| Terminal | one console per session | Also: one per command, hidden. Agent commands show in the Console view. |
+| Terminal output limit | 1048576 bytes | What is kept of a command's output for the agent. |
+| Log the protocol | off | Every message to and from the agent goes to the "Kiro ACP" console. |
+| Show mode and model pickers | off | The page starts with its settings row open. |
+| Session list collapsed | off | The page starts with its session list folded. |
+| Remember session options | on | Mode, model and options chosen in one session are given to the next. |
+
+A changed CLI path or arguments apply when the agent is next started (*Restart Agent Process*).
+
+## Commands
+
+In the chat view's menu and toolbar, and through *Quick Access* (`Ctrl+3`):
+
+| Command | |
+|---|---|
+| Focus Kiro Chat | Opens or activates the chat view. |
+| New Kiro Session | A fresh session in the chat view. |
+| New Kiro Chat View | One more chat view; each view has its own sessions. |
+| Cancel Current Turn | |
+| Restart Agent Process | |
+| Log In to Kiro | Runs the CLI's sign-in in a terminal window. |
+| Send Selection to Kiro Chat | `Ctrl+Alt+K` in a text editor (`Cmd+Alt+K` on a Mac), also in the editor's context menu. |
+| Open Plan, Approve Plan, Reject Plan | The agent's plan as a read-only document. |
+| Show Protocol Log | |
+| Forget Remembered Session Options | |
+
+Not ported from the extension: the chat as an editor tab (`chatLocation`), the Accept/Reject commands of a proposed change (they are buttons above the compare panes), "Open Past Session" as a command (the chat's history button opens the list), dropping files onto the chat (use `@`), and the experimental agent link. `docs/DECISIONS.md` has the reasons.
+
+## Running it against the test agent
+
+The tests talk to a fake agent that replays recorded sessions; the plugin can be pointed at it by hand. Set *Kiro CLI* to the wrapper next to it, as an absolute path:
+
+- Windows: `<repository>\tests\fixtures\fake-agent\kiro-cli-fake.cmd`
+- elsewhere: `<repository>/tests/fixtures/fake-agent/kiro-cli-fake`
+
+and restart the agent. `npm --prefix tests/fixtures/fake-agent ci` must have been run once, and `node` must be on `PATH`. A prompt of the form `/scenario tour` plays the recording `tests/fixtures/recordings/tour.json`; other prompts get a short canned answer. *Extra arguments* take the fake agent's flags, for example `--auth-required`.
 
 ## Build
 
@@ -58,6 +105,8 @@ Both sets are copied verbatim by a script and never edited here.
 |---|---|---|
 | The chat webview | `webview/vendor/` | `npm --prefix webview run sync` |
 | The fake agent and its recordings | `tests/fixtures/` | `node tests/fixtures/sync.mjs` |
+
+Both scripts copy the reference's working tree, so run them against a checkout without uncommitted changes. After a sync, `npm --prefix webview run samples` regenerates `tests/fixtures/protocol-samples.json`; if the page protocol changed, the Java records in `core/model` have to follow, and `PageProtocolCoverageTest` fails until every new message type has a handler.
 
 Each script takes the path of the extension's repository as an argument and defaults to `../vs-code-kiro-plugin`. Eclipse-specific page code lives in `webview/host/`.
 
